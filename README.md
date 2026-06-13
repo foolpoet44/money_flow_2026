@@ -33,17 +33,18 @@ open dashboard/index.html
 ### 수집기 (로컬, 네트워크 필요)
 
 ```bash
-pip install -r collector/requirements.txt
-python collector/collector.py        # → data.json 생성
+python collector/collector.py        # → data.json 생성 (외부 의존성 없음)
 ```
 
-> pykrx는 KRX/네이버 스크래핑이라 호출이 느리고, 반환 컬럼명(한글)이 버전별로 미세하게 다를 수 있다.
-> 컬럼이 안 맞으면 `collector.py`의 `FOREIGN_COLS` / `INSTI_COLS` 후보를 조정한다.
+> **데이터 소스 = 네이버 금융 JSON API.** 원래 설계(pykrx)는 KRX 데이터포털이
+> 로그인(KRX_ID/KRX_PW)을 의무화하면서 막혔다. 네이버 모바일/증권 API는 익명으로
+> 같은 데이터를 주므로 전환했고, 부수효과로 외부 패키지가 전부 빠져 표준 라이브러리만 쓴다.
+> 소스·단위 매핑은 `collector/collector.py` 상단 주석 참고.
 
 ## 진행 현황
 
 - [x] **Sprint 0** — 스캐폴드 & 계약 고정 (독립 git, 폴더 구조, 시드 이전)
-- [ ] **Sprint 1** — 실데이터 수집 경화 (pykrx 컬럼 검증, 재시도, `data.json` 실생성)
+- [x] **Sprint 1** — 실데이터 수집 (네이버 JSON API 전환, 재시도·검증, `data.json` 실생성)
 - [ ] **Sprint 2** — 신호 엔진 분리 & 단위 테스트 (`signal_engine.js`)
 - [ ] **Sprint 3** — 대시보드 데이터 구동 (`window.DATA` 우선 + 합성 fallback)
 - [ ] **Sprint 4** — 자동화 & 텔레그램 알림
