@@ -1,0 +1,5 @@
+# 자금 조류 수집기 의존성
+# pykrx: KRX/네이버 스크래핑 기반 한국 주식 데이터 (API 키 불필요)
+# pandas: pykrx 반환 DataFrame 처리
+pykrx>=1.0.45
+pandas>=2.0
