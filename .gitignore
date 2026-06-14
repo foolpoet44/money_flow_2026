@@ -12,5 +12,8 @@ __pycache__/
 .venv/
 venv/
 
+# 데일리 파이프라인 로그
+scripts/run_daily.log
+
 # macOS
 .DS_Store
