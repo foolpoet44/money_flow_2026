@@ -49,6 +49,10 @@ node dashboard/signal_engine.test.js >>"$LOG" 2>&1
 log "다이제스트 생성"
 node scripts/digest.js | tee -a "$LOG"
 
+# 4.5) 엣지 원장 적재 — 오늘 신호를 미리 기록(out-of-sample 누적). 실패 비치명적.
+log "엣지 원장 적재"
+node backtest/ledger.js >>"$LOG" 2>&1 || log "⚠ 원장 적재 실패(비치명적)"
+
 # 5) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
 log "대시보드 발행 (GitHub Pages)"
 if ! scripts/publish.sh >>"$LOG" 2>&1; then

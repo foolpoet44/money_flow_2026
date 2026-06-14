@@ -8,6 +8,9 @@
 /dashboard/research.js
 # 다이제스트 캐시(봇이 읽는 최신 다이제스트)
 /scripts/last_digest.txt
+# 백테스트 데이터 산출물(코드만 추적, 데이터는 재생성/누적)
+/backtest/history.json
+/backtest/ledger.jsonl
 
 # 파이썬
 __pycache__/

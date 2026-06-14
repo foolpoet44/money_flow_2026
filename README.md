@@ -64,6 +64,18 @@ launchctl unload ~/Library/LaunchAgents/com.moneyflow.daily.plist   # 해제
 
 텔레그램은 `scripts/run_daily.env`(gitignore·권한 600)의 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`로 켜진다. 비어 있으면 다이제스트는 출력만 하고 전송하지 않는다(§8: Alert 이상만 푸시, Watch 무음).
 
+### 엣지 검증 (backtest/ — 신호는 돈이 되는가?)
+
+신호를 *반증 가능*하게 만드는 키스톤. 신호 로직(`signal_engine.js`)을 **시점불변(point-in-time)**으로 재생해, 익일진입·왕복비용 차감·무미래참조로 등급별 적중률·기대수익을 N·t값과 함께 측정한다.
+
+```bash
+python backtest/fetch_history.py   # 5종목 최대 이력(~60거래일) → history.json
+node   backtest/backtest.js        # 등급×기간별 엣지 리포트
+node   backtest/ledger.js          # 오늘 신호를 ledger.jsonl에 적재(out-of-sample 누적)
+```
+
+> **첫 판정(2026-03~06, 60거래일):** 방향성 모드(신호대로 매수=롱·매도=숏)는 비용 차감 후 **전 구간 노이즈 또는 손실**이며, 최상위 "Critical" 등급이 10일 −9.1%(t=−2.04)로 **가장 나빴다.** Long-only가 양(+)으로 보이는 건 대부분 상승장 드리프트(기준선)와 겹치는 구간·표본부족 탓이다. **이 표본으로 "엣지 있음"을 주장할 수 없다.** 신호는 매매 트리거가 아니라 관찰 보조로만 쓰고, 라이브 원장으로 표본을 누적해 재판정할 것.
+
 ## 진행 현황
 
 - [x] **Sprint 0** — 스캐폴드 & 계약 고정 (독립 git, 폴더 구조, 시드 이전)
