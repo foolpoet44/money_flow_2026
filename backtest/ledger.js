@@ -16,6 +16,63 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const E = require(path.join(ROOT, "dashboard", "signal_engine.js"));
+const S = require(path.join(__dirname, "stats.js"));
+const ledgerPath = path.join(__dirname, "ledger.jsonl");
+
+function appendIfNew(rec) {
+  // 같은 기준일 중복 적재 방지(재실행·시딩 안전)
+  let existing = "";
+  try {
+    existing = fs.readFileSync(ledgerPath, "utf8");
+  } catch {
+    /* 첫 실행 */
+  }
+  if (existing.includes('"as_of":"' + rec.as_of + '"')) return false;
+  fs.appendFileSync(ledgerPath, JSON.stringify(rec) + "\n");
+  return true;
+}
+
+// ── --seed: history.json을 시점불변 재생해 과거 신호를 backfill ──
+// 정산(settle.js) 검증·교차확인용. seeded:true 로 라이브 OOS와 구분한다.
+if (process.argv.includes("--seed")) {
+  const hist = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "history.json"), "utf8"),
+  );
+  const { WARMUP } = S.CONFIG;
+  const byDate = {}; // 날짜 → [신호...]
+  for (const st of hist.stocks) {
+    const { foreign, institution, close, dates } = st;
+    for (let t = WARMUP; t < foreign.length; t++) {
+      const z = E.zlast(foreign.slice(0, t + 1));
+      if (Math.abs(z) < E.STOCK_MIN_Z) continue;
+      const dir = Math.sign(foreign[t]);
+      const conf = 1 + (dir === Math.sign(institution[t]) && dir !== 0 ? 1 : 0);
+      (byDate[dates[t]] = byDate[dates[t]] || []).push({
+        scope: st.name,
+        tier: E.tierOf(Math.abs(z), conf),
+        z: +z.toFixed(2),
+        conf,
+        dir,
+      });
+    }
+  }
+  let added = 0;
+  for (const d of Object.keys(byDate).sort()) {
+    if (
+      appendIfNew({
+        as_of: d,
+        logged_at: null,
+        seeded: true,
+        signals: byDate[d],
+      })
+    )
+      added++;
+  }
+  console.log(
+    `✓ 시딩 완료: ${added}일치 적재(seeded). 정산 검증용 — 라이브 OOS 아님.`,
+  );
+  process.exit(0);
+}
 
 let data;
 try {
@@ -26,19 +83,6 @@ try {
 }
 
 const signals = E.buildSignals(data);
-const ledgerPath = path.join(__dirname, "ledger.jsonl");
-
-// 같은 기준일을 중복 적재하지 않는다(파이프라인 재실행 안전)
-let existing = "";
-try {
-  existing = fs.readFileSync(ledgerPath, "utf8");
-} catch {
-  /* 첫 실행 */
-}
-if (existing.includes('"as_of":"' + data.as_of + '"')) {
-  console.log("· 원장: " + data.as_of + " 이미 적재됨(건너뜀)");
-  process.exit(0);
-}
 
 const rec = {
   as_of: data.as_of,
@@ -54,7 +98,10 @@ const rec = {
       dir: s.title.includes("매수") ? 1 : s.title.includes("매도") ? -1 : 0,
     })),
 };
-fs.appendFileSync(ledgerPath, JSON.stringify(rec) + "\n");
-console.log(
-  `✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`,
-);
+if (appendIfNew(rec)) {
+  console.log(
+    `✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`,
+  );
+} else {
+  console.log("· 원장: " + data.as_of + " 이미 적재됨(건너뜀)");
+}

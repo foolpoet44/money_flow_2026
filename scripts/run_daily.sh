@@ -53,6 +53,10 @@ node scripts/digest.js | tee -a "$LOG"
 log "엣지 원장 적재"
 node backtest/ledger.js >>"$LOG" 2>&1 || log "⚠ 원장 적재 실패(비치명적)"
 
+# 4.6) 원장 정산 재판정(OOS) — 과거 신호에 실현수익 결합. 가격 조회. 비치명적.
+log "원장 정산 재판정(OOS)"
+node backtest/settle.js >>"$LOG" 2>&1 || log "⚠ 정산 실패(비치명적)"
+
 # 5) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
 log "대시보드 발행 (GitHub Pages)"
 if ! scripts/publish.sh >>"$LOG" 2>&1; then

@@ -16,30 +16,15 @@
 const fs = require("fs");
 const path = require("path");
 const E = require(path.join(__dirname, "..", "dashboard", "signal_engine.js"));
+const S = require(path.join(__dirname, "stats.js"));
 
-// ── 설정 ──
-const WARMUP = 20; // zlast 신뢰 위한 최소 과거
-const HORIZONS = [1, 5, 10]; // 보유일수(거래일)
-const COST = 0.002; // 왕복 거래비용 0.2%(수수료+증권거래세 근사)
-const MIN_N = 15; // 이 미만이면 통계적으로 '표본부족'
+// 공유 방법론(stats.js) — backtest와 settle이 같은 잣대를 쓴다
+const { WARMUP, HORIZONS, COST } = S.CONFIG;
+const { mean, tstat, pct, verdict } = S;
 
 const hist = JSON.parse(
   fs.readFileSync(path.join(__dirname, "history.json"), "utf8"),
 );
-
-// ── 통계 유틸 ──
-const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-function std(a) {
-  if (a.length < 2) return 0;
-  const m = mean(a);
-  return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1));
-}
-function tstat(a) {
-  // 평균이 0과 다른가 (H0: mean=0)
-  const s = std(a);
-  return s === 0 ? 0 : mean(a) / (s / Math.sqrt(a.length));
-}
-const pct = (x) => (x * 100).toFixed(2) + "%";
 
 // ── 재생: 모든 종목·모든 날의 신호와 사후수익 ──
 // trades[tier][h] = [수익...], trades.ALL[h] = [...]; longOnly 동일 구조
@@ -92,16 +77,6 @@ for (const s of hist.stocks) {
       }
     });
   }
-}
-
-// ── 판정 ──
-function verdict(arr, baseMean) {
-  if (arr.length < MIN_N) return "표본부족";
-  const t = tstat(arr);
-  if (Math.abs(t) < 2) return "노이즈(유의X)";
-  const m = mean(arr);
-  if (m <= 0) return "음(−)";
-  return m > baseMean ? "양(+) 엣지후보" : "양(+)이나 기준선이하";
 }
 
 function reportBucket(title, store) {

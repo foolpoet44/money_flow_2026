@@ -70,9 +70,13 @@ launchctl unload ~/Library/LaunchAgents/com.moneyflow.daily.plist   # 해제
 
 ```bash
 python backtest/fetch_history.py   # 5종목 최대 이력(~60거래일) → history.json
-node   backtest/backtest.js        # 등급×기간별 엣지 리포트
+node   backtest/backtest.js        # 등급×기간별 엣지 리포트(과거 재생, in-sample)
 node   backtest/ledger.js          # 오늘 신호를 ledger.jsonl에 적재(out-of-sample 누적)
+node   backtest/ledger.js --seed   # (검증용) history를 원장에 시딩
+node   backtest/settle.js          # 원장 신호에 실현수익 결합·재판정(OOS 정본)
 ```
+
+`backtest.js`(과거 재생)는 과최적화 위험이 있는 반면 `settle.js`는 **기록 시점에 미래를 몰랐던** 원장을 정산하므로 가장 정직한 증거다(공유 잣대 `stats.js`). 시딩 정산이 `backtest.js`와 숫자가 일치함으로 정산 로직을 교차검증했고, 라이브 OOS 표본은 매일 누적된다.
 
 > **첫 판정(2026-03~06, 60거래일):** 방향성 모드(신호대로 매수=롱·매도=숏)는 비용 차감 후 **전 구간 노이즈 또는 손실**이며, 최상위 "Critical" 등급이 10일 −9.1%(t=−2.04)로 **가장 나빴다.** Long-only가 양(+)으로 보이는 건 대부분 상승장 드리프트(기준선)와 겹치는 구간·표본부족 탓이다. **이 표본으로 "엣지 있음"을 주장할 수 없다.** 신호는 매매 트리거가 아니라 관찰 보조로만 쓰고, 라이브 원장으로 표본을 누적해 재판정할 것.
 
