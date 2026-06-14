@@ -19,6 +19,14 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 LOG="$ROOT/scripts/run_daily.log"
 
+# 비밀키(텔레그램 토큰 등)는 커밋하지 않는 로컬 env 파일에서 로드한다(있으면).
+# 수동 실행과 launchd 실행이 같은 비밀을 공유하게 하는 단일 출처.
+if [ -f "$ROOT/scripts/run_daily.env" ]; then
+  set -a
+  . "$ROOT/scripts/run_daily.env"
+  set +a
+fi
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 log "── 데일리 사이클 시작 ──"
