@@ -679,6 +679,94 @@
         border-bottom-color: var(--outflow);
       }
 
+      /* 오늘의 종합 카드 */
+      .rd-synth {
+        background: linear-gradient(160deg, #10191f 0%, #0c1318 100%);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
+      }
+      .rd-synth h4 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .rd-synth .lead {
+        font-size: 13.5px;
+        line-height: 1.75;
+        color: var(--bone);
+      }
+      .rd-synth .lead b {
+        color: var(--inflow);
+        font-weight: 700;
+      }
+      .rd-tone {
+        font-weight: 700;
+      }
+      .rd-tone.bull {
+        color: var(--inflow);
+      }
+      .rd-tone.bear {
+        color: var(--outflow);
+      }
+      .rd-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 12px;
+      }
+      .rd-chip {
+        font-size: 11px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        padding: 3px 10px;
+      }
+      .rd-chip b {
+        color: var(--bone);
+        font-weight: 600;
+      }
+      /* 정독 추천 */
+      .rd-rec-head {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin: 18px 0 9px;
+      }
+      .report.rec {
+        border: 1px solid rgba(242, 169, 59, 0.3);
+        background: linear-gradient(
+          160deg,
+          rgba(242, 169, 59, 0.05),
+          var(--panel)
+        );
+      }
+      .rd-rank {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        color: var(--alert);
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .rd-reasons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .rd-reason {
+        font-size: 10px;
+        color: var(--alert);
+        background: rgba(242, 169, 59, 0.1);
+        border: 1px solid rgba(242, 169, 59, 0.25);
+        border-radius: 4px;
+        padding: 2px 7px;
+      }
+
       footer {
         margin-top: 46px;
         padding-top: 20px;
@@ -850,6 +938,9 @@
 
     <!-- 리서치 다이제스트(별도 모듈). research_collector.py가 생성. 없으면 섹션 숨김. -->
     <script src="research.js"></script>
+
+    <!-- 리서치 종합·추천 엔진(순수함수 · 브라우저/Node 공유). 수급 신호와 교차. -->
+    <script src="research_digest.js"></script>
 
     <script>
       /* =========================================================
@@ -1171,27 +1262,41 @@
             (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c],
           );
         document.getElementById("researchEyebrow").style.display = "";
-        // collector가 섹터연관·시황 우선으로 정렬해 둠 → 상위 12건만 노출
-        const items = R.reports.slice(0, 12);
-        document.getElementById("researchList").innerHTML = items
-          .map((r) => {
-            const stock = r.stock
-              ? `<span class="rstock">${esc(r.stock)}</span> `
-              : "";
-            const tgt = r.target ? ` · 목표 ${esc(r.target)}` : "";
-            const op = r.opinion ? ` · ${esc(r.opinion)}` : "";
-            const views = r.views ? ` · 조회 ${r.views.toLocaleString()}` : "";
-            const sum = r.summary
-              ? `<div class="rsum">${esc(r.summary)}</div>`
-              : "";
-            const pdf = r.pdf
-              ? `<a href="${r.pdf}" target="_blank" rel="noopener">PDF 원본 ↗</a>`
-              : "";
-            return `<div class="report ${r.sector ? "sector" : ""}">
+
+        // 종합·추천 엔진: 리포트 ∩ 수급 신호(SIGNALS)
+        const digest = buildDigest(R, SIGNALS);
+
+        // 한 리포트 카드 마크업(추천/일반 공용)
+        const card = (r, opts = {}) => {
+          const stock = r.stock
+            ? `<span class="rstock">${esc(r.stock)}</span> `
+            : "";
+          const tgt = r.target ? ` · 목표 ${esc(r.target)}` : "";
+          const op = r.opinion ? ` · ${esc(r.opinion)}` : "";
+          const views = r.views ? ` · 조회 ${r.views.toLocaleString()}` : "";
+          const sum = r.summary
+            ? `<div class="rsum">${esc(r.summary)}</div>`
+            : "";
+          const pdf = r.pdf
+            ? `<a href="${r.pdf}" target="_blank" rel="noopener">PDF 원본 ↗</a>`
+            : "";
+          const rank = opts.rank
+            ? `<span class="rd-rank">정독 ${opts.rank}</span>`
+            : "";
+          const reasons = opts.reasons
+            ? `<div class="rd-reasons">${opts.reasons
+                .map((x) => `<span class="rd-reason">${esc(x)}</span>`)
+                .join("")}</div>`
+            : "";
+          const cls = opts.rank
+            ? "report rec sector"
+            : `report ${r.sector ? "sector" : ""}`;
+          return `<div class="${cls}">
       <div class="rhead">
-        <span class="cat">${esc(r.category_label)}</span>
+        ${rank}<span class="cat">${esc(r.category_label)}</span>
         <span class="rtitle">${stock}${esc(r.title)}</span>
       </div>
+      ${reasons}
       <div class="rmeta"><b>${esc(r.broker) || "증권사 미상"}</b> · ${r.date}${tgt}${op}${views}</div>
       ${sum}
       <div class="rlinks">
@@ -1199,8 +1304,54 @@
         ${pdf}
       </div>
     </div>`;
-          })
+        };
+
+        // ① 오늘의 종합 (템플릿 생성 — AI 아님)
+        const catStr = Object.entries(digest.byCat)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(" · ");
+        const chips = digest.themes
+          .map((t) => `<span class="rd-chip"><b>${esc(t.k)}</b> ${t.n}</span>`)
           .join("");
+        const toneCls = digest.tone.label.includes("매수")
+          ? "bull"
+          : digest.tone.label.includes("신중")
+            ? "bear"
+            : "";
+        const flow = digest.flowLinkStocks.length
+          ? `오늘 수급 신호가 뜬 <b>${digest.flowLinkStocks
+              .map(esc)
+              .join(
+                ", ",
+              )}</b>에 대한 리포트가 함께 나왔습니다 — 사실(수급)과 해석(리서치)이 겹치는 1순위 정독 지점입니다.`
+          : `오늘은 수급 신호 종목과 직접 겹치는 리포트가 없어, 시황·산업 리포트로 큰 그림을 읽습니다.`;
+        const synth = `<div class="rd-synth">
+      <h4>오늘의 종합 · ${esc(R.as_of)}</h4>
+      <div class="lead">총 <b>${digest.total}건</b>의 리포트 (${catStr}). 리포트 톤은 <span class="rd-tone ${toneCls}">${digest.tone.label}</span> (긍정 ${digest.tone.bull} · 부정 ${digest.tone.bear} 키워드 기준 근사). ${flow}</div>
+      ${chips ? `<div class="rd-chips">${chips}</div>` : ""}
+    </div>`;
+
+        // ② 정독 추천 (설명 가능한 점수 + 이유)
+        const recUrls = new Set(
+          digest.recommendations.map((x) => x.report.url),
+        );
+        const recCards = digest.recommendations
+          .map((x, i) => card(x.report, { rank: i + 1, reasons: x.reasons }))
+          .join("");
+
+        // ③ 전체 리스트 (추천된 것 제외, 상위 10건)
+        const listCards = R.reports
+          .filter((r) => !recUrls.has(r.url))
+          .slice(0, 10)
+          .map((r) => card(r))
+          .join("");
+
+        document.getElementById("researchList").innerHTML =
+          synth +
+          (recCards
+            ? `<div class="rd-rec-head">전문 정독 추천 · 전체 맥락 기준</div>${recCards}`
+            : "") +
+          `<div class="rd-rec-head">전체 리포트</div>${listCards}`;
       }
 
       /* ---- init + 토글 ---- */

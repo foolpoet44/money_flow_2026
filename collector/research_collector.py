@@ -42,7 +42,7 @@ CATEGORIES = [
     ("market", "시황", "https://finance.naver.com/research/market_info_list.naver"),
 ]
 
-MAX_SUMMARIES = 12   # 상세 리드요약을 가져올 리포트 상한(섹터연관·시황 우선). 호출수 제한.
+MAX_SUMMARIES = 15   # 상세 리드요약을 가져올 리포트 상한. 정렬 상위(섹터·시황·조회수)부터. 호출수 제한.
 RETRY = 3
 SLEEP = 0.25
 
@@ -196,16 +196,14 @@ def main():
     cat_rank = {"market": 0, "industry": 1, "company": 2}
     reports.sort(key=lambda r: (not r["sector"], cat_rank.get(r["category"], 9), -r["views"]))
 
-    # 상세 요약 보강: 섹터연관·시황 우선으로 상한까지만 호출(시간 제한)
+    # 상세 요약 보강: 이미 중요도순(섹터→시황→조회수)으로 정렬돼 있으므로
+    # 상위 MAX_SUMMARIES건을 무조건 보강한다. 추천 대상이 본문 요약을 갖도록.
     print("· 핵심 리포트 상세 요약 추출 중…")
     enriched = 0
-    for r in reports:
-        if enriched >= MAX_SUMMARIES:
-            break
-        if r["sector"] or r["category"] == "market":
-            enrich_detail(r)
-            enriched += 1
-            time.sleep(SLEEP)
+    for r in reports[:MAX_SUMMARIES]:
+        enrich_detail(r)
+        enriched += 1
+        time.sleep(SLEEP)
 
     data = {
         "as_of": as_of,
