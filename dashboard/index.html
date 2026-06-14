@@ -761,6 +761,9 @@
          없을 때(파일 미생성·file:// 첫 실행)는 404로 조용히 무시되고 아래 합성 fallback이 쓰인다. -->
     <script src="data.js"></script>
 
+    <!-- 신호 엔진(§5 정본). 순수함수 — 브라우저/Node 공유. 메인 스크립트보다 먼저 로드. -->
+    <script src="signal_engine.js"></script>
+
     <script>
       /* =========================================================
    데이터 계약 (collector.py 출력과 동일 스키마)
@@ -867,33 +870,9 @@
       const USING_REAL = typeof window.DATA !== "undefined" && window.DATA;
       const DATA = USING_REAL || FALLBACK_SYNTHETIC;
 
-      /* =========================================================
-   신호 엔진: 각 시계열 자신의 분포 기준 z-score
-   ========================================================= */
-      function stats(arr) {
-        const m = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const sd =
-          Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length) ||
-          1;
-        return { m, sd };
-      }
-      function zlast(arr) {
-        const { m, sd } = stats(arr.slice(0, -1));
-        return (arr[arr.length - 1] - m) / sd;
-      }
-      function fmt(n) {
-        const s = n >= 0 ? "+" : "−";
-        return s + Math.abs(Math.round(n)).toLocaleString();
-      }
-      function fmtP(n) {
-        return Math.abs(Math.round(n)).toLocaleString();
-      }
-
-      function tierOf(absz, confluence) {
-        if (absz >= 2 || confluence >= 3) return "critical";
-        if (absz >= 1.2 || confluence >= 2) return "alert";
-        return "watch";
-      }
+      /* 신호 엔진(stats·zlast·fmt·fmtP·tierOf·buildSignals)은 signal_engine.js로
+         분리됐다(§5 정본). 위 <script src="signal_engine.js">가 전역에 노출하므로
+         여기서는 그대로 호출만 한다. */
 
       /* ---- 헤로 조류 (선택 시장) ---- */
       let curMkt = "KOSPI";
@@ -937,72 +916,8 @@
           .join("");
       }
 
-      /* ---- 신호 생성 ---- */
-      function buildSignals() {
-        const sigs = [];
-        // 지수 레벨 신호
-        for (const mkt of ["KOSPI", "KOSDAQ"]) {
-          const d = DATA.index[mkt];
-          const zf = zlast(d.foreign),
-            zi = zlast(d.institution);
-          const fDir = Math.sign(d.foreign[N - 1]),
-            iDir = Math.sign(d.institution[N - 1]);
-          const closeDir = Math.sign(d.close[N - 1] - d.close[N - 2]);
-          let conf = 1;
-          if (fDir === iDir && fDir !== 0) conf++;
-          if (fDir === closeDir && fDir !== 0) conf++;
-          const az = Math.max(Math.abs(zf), Math.abs(zi));
-          const tier = tierOf(az, conf);
-          const dir = d.foreign[N - 1] + d.institution[N - 1] >= 0;
-          sigs.push({
-            tier,
-            scope: mkt,
-            z: az,
-            conf,
-            title:
-              `${mkt} ${dir ? "쌍끌이 유입" : "동반 이탈"} ${conf >= 3 ? "(3조류 정렬)" : conf >= 2 ? "(2조류 정렬)" : ""}`.trim(),
-            desc: `외국인 ${fmt(d.foreign[N - 1])}억(z=${zf.toFixed(1)}), 기관 ${fmt(d.institution[N - 1])}억(z=${zi.toFixed(1)}). 지수 종가 ${closeDir >= 0 ? "상승" : "하락"} 동반.`,
-            tags: ["외국인", "기관", "지수종가"]
-              .slice(0, conf + 0)
-              .concat(conf >= 3 ? [] : []),
-            tagsFull: [
-              "외국인 수급",
-              "기관 수급",
-              closeDir >= 0 ? "종가 상승" : "종가 하락",
-            ],
-          });
-        }
-        // 종목 극단 신호
-        DATA.sector.stocks.forEach((s) => {
-          const zf = zlast(s.foreign);
-          if (Math.abs(zf) >= 1.2) {
-            const fDir = Math.sign(s.foreign[N - 1]),
-              iDir = Math.sign(s.institution[N - 1]);
-            let conf = 1;
-            if (fDir === iDir && fDir !== 0) conf++;
-            const tier = tierOf(Math.abs(zf), conf);
-            sigs.push({
-              tier,
-              scope: s.name,
-              z: Math.abs(zf),
-              conf,
-              title: `${s.name} 외국인 ${s.foreign[N - 1] >= 0 ? "집중 매수" : "집중 매도"}`,
-              desc: `외국인 ${fmt(s.foreign[N - 1])}억 — 30일 평균 대비 z=${zf.toFixed(1)}. 기관은 ${fmt(s.institution[N - 1])}억 ${conf >= 2 ? "동조" : "역행"}.`,
-              tagsFull: [
-                "외국인 수급",
-                conf >= 2 ? "기관 동조" : "기관 역행",
-                s.ticker,
-              ],
-            });
-          }
-        });
-        // 등급 순 정렬
-        const order = { critical: 0, alert: 1, watch: 2 };
-        sigs.sort((a, b) => order[a.tier] - order[b.tier] || b.z - a.z);
-        return sigs;
-      }
-
-      const SIGNALS = buildSignals();
+      // 신호 생성은 signal_engine.js의 buildSignals(data)가 담당(§5.4)
+      const SIGNALS = buildSignals(DATA);
 
       /* ---- 헤로 시그널 (최상위 1건) ---- */
       function renderHero() {
