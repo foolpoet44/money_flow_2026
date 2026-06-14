@@ -86,6 +86,27 @@ if (research && research.reports && research.reports.length) {
     L.push(`   ${r.pdf || r.url}`);
   });
 }
+// 엣지 원장(OOS) 누적 현황 — 신호가 '실제로' 돈이 됐는지 매일 추적(정직성 장치)
+try {
+  const es = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "backtest/edge_status.json"), "utf8"),
+  );
+  const h5 = es.horizons && es.horizons["5"];
+  L.push("");
+  L.push(
+    `■ 엣지 원장(OOS) · 라이브 정산 ${es.settled}건 / 미정산 ${es.pending}`,
+  );
+  if (h5) {
+    const m =
+      h5.meanPct === null
+        ? "-"
+        : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
+    L.push(`  5일 보유: N=${h5.n} · 평균 ${m} · 판정 ${h5.verdict}`);
+  }
+} catch {
+  /* 아직 정산 이력 없음 — 조용히 생략 */
+}
+
 // 대시보드 링크 — 텔레그램에서 탭하면 실시간 화면(GitHub Pages)을 연다
 const DASH =
   process.env.DASHBOARD_URL || "https://foolpoet44.github.io/money_flow_2026/";

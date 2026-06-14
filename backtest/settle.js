@@ -223,6 +223,33 @@ async function main() {
   console.log(
     "· 미정산은 시간이 지나면 자동 정산된다. 라이브 표본이 쌓일수록 신뢰도↑.",
   );
+
+  // 다이제스트/봇이 읽을 라이브 OOS 상태 요약 기록(누적을 매일 눈에 보이게)
+  const status = {
+    updated_for: records.length
+      ? records
+          .map((r) => r.as_of)
+          .sort()
+          .slice(-1)[0]
+      : null,
+    live_records: records.filter((r) => !r.seeded).length,
+    settled: counts.live.settled,
+    pending: counts.live.pending,
+    horizons: {},
+  };
+  HORIZONS.forEach((h) => {
+    const arr = store.live.ALL[h];
+    const bm = baseline[h].length ? mean(baseline[h]) : 0;
+    status.horizons[h] = {
+      n: arr.length,
+      meanPct: arr.length ? +(mean(arr) * 100).toFixed(2) : null,
+      verdict: verdict(arr, bm),
+    };
+  });
+  fs.writeFileSync(
+    path.join(__dirname, "edge_status.json"),
+    JSON.stringify(status, null, 2),
+  );
 }
 
 main().catch((e) => {

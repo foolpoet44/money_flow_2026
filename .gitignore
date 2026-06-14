@@ -11,6 +11,7 @@
 # 백테스트 데이터 산출물(코드만 추적, 데이터는 재생성/누적)
 /backtest/history.json
 /backtest/ledger.jsonl
+/backtest/edge_status.json
 
 # 파이썬
 __pycache__/

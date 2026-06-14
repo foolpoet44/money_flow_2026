@@ -45,19 +45,20 @@ fi
 log "신호 엔진 테스트"
 node dashboard/signal_engine.test.js >>"$LOG" 2>&1
 
-# 4) 다이제스트 생성 + (옵션) 텔레그램 전송
-log "다이제스트 생성"
-node scripts/digest.js | tee -a "$LOG"
-
-# 4.5) 엣지 원장 적재 — 오늘 신호를 미리 기록(out-of-sample 누적). 실패 비치명적.
+# 4) 엣지 원장 적재 — 오늘 신호를 미리 기록(out-of-sample 누적). 실패 비치명적.
 log "엣지 원장 적재"
 node backtest/ledger.js >>"$LOG" 2>&1 || log "⚠ 원장 적재 실패(비치명적)"
 
-# 4.6) 원장 정산 재판정(OOS) — 과거 신호에 실현수익 결합. 가격 조회. 비치명적.
+# 5) 원장 정산 재판정(OOS) — 과거 신호에 실현수익 결합. 가격 조회. 비치명적.
+#    다이제스트보다 먼저 돌려 '당일' OOS 현황(edge_status.json)을 반영한다.
 log "원장 정산 재판정(OOS)"
 node backtest/settle.js >>"$LOG" 2>&1 || log "⚠ 정산 실패(비치명적)"
 
-# 5) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
+# 6) 다이제스트 생성 + (옵션) 텔레그램 전송 — OOS 누적 현황 한 줄 포함
+log "다이제스트 생성"
+node scripts/digest.js | tee -a "$LOG"
+
+# 7) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
 log "대시보드 발행 (GitHub Pages)"
 if ! scripts/publish.sh >>"$LOG" 2>&1; then
   log "⚠ 발행 실패(푸시 권한/네트워크) — Pages만 미갱신, 로컬·텔레그램은 정상"
