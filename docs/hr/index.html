@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>조직 조류 · People Flow Intelligence</title>
+    <link
+      rel="stylesheet"
+      as="style"
+      crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
+    />
+    <style>
+      :root {
+        --ink: #0b1115;
+        --panel: #101920;
+        --line: rgba(236, 231, 218, 0.08);
+        --line-strong: rgba(236, 231, 218, 0.16);
+        --bone: #ece7da;
+        --muted: #7c8893;
+        --muted-2: #586571;
+        --risk: #f2564b; /* 위험 약신호 — 적색 */
+        --calm: #3e9ad1; /* 안정 — 청색 */
+        --watch: #7c8893;
+        --alert: #f2a93b;
+        --critical: #ff4438;
+        --critical-soft: rgba(255, 68, 56, 0.12);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--ink);
+        color: var(--bone);
+        font-family:
+          "Pretendard",
+          -apple-system,
+          sans-serif;
+        line-height: 1.5;
+        letter-spacing: -0.01em;
+        padding: 0 0 80px;
+      }
+      .mono {
+        font-variant-numeric: tabular-nums;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 28px;
+      }
+      .topbar {
+        border-bottom: 1px solid var(--line);
+        padding: 22px 0 20px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .brand .kr {
+        font-size: 25px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .brand .en {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.28em;
+      }
+      .meta {
+        text-align: right;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .meta .val {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--bone);
+      }
+      .ethics {
+        background: rgba(62, 154, 209, 0.1);
+        border: 1px solid rgba(62, 154, 209, 0.3);
+        border-radius: 10px;
+        padding: 11px 16px;
+        margin-top: 18px;
+        font-size: 12px;
+        color: #bfe0f2;
+      }
+      .ethics b {
+        color: #fff;
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 36px 0 16px;
+      }
+      .eyebrow .num {
+        font-size: 11px;
+        color: var(--muted-2);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 2px 6px;
+      }
+      .eyebrow h2 {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--muted);
+      }
+      .eyebrow .rule {
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 18px;
+        margin-top: 24px;
+      }
+      @media (max-width: 860px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px;
+      }
+      .tide-t {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .tide-net {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        margin: 6px 0 2px;
+      }
+      .tide-sub {
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .spark {
+        width: 100%;
+        height: 40px;
+        display: block;
+        margin-top: 14px;
+      }
+      .signal-hero {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .tier-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        padding: 5px 11px;
+        border-radius: 999px;
+        align-self: flex-start;
+      }
+      .tier-tag.critical {
+        background: var(--critical-soft);
+        color: var(--critical);
+        border: 1px solid rgba(255, 68, 56, 0.35);
+      }
+      .tier-tag.alert {
+        background: rgba(242, 169, 59, 0.1);
+        color: var(--alert);
+        border: 1px solid rgba(242, 169, 59, 0.3);
+      }
+      .tier-tag.watch {
+        background: rgba(124, 136, 147, 0.1);
+        color: var(--muted);
+        border: 1px solid var(--line-strong);
+      }
+      .signal-hero h3 {
+        font-size: 20px;
+        font-weight: 800;
+        line-height: 1.35;
+        margin: 14px 0 8px;
+      }
+      .signal-hero p {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .conf {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .conf .grade {
+        font-size: 24px;
+        font-weight: 700;
+      }
+      .conf .gm {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .conf .gm b {
+        color: var(--bone);
+      }
+      .teams {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .teams {
+          grid-template-columns: 1fr;
+        }
+      }
+      .team {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+        border-left: 3px solid var(--line-strong);
+      }
+      .team.critical {
+        border-left-color: var(--critical);
+      }
+      .team.alert {
+        border-left-color: var(--alert);
+      }
+      .team.watch {
+        border-left-color: var(--muted-2);
+      }
+      .team.healthy {
+        border-left-color: var(--calm);
+      }
+      .team .th {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+      }
+      .team .name {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .team .sz {
+        font-size: 11px;
+        color: var(--muted-2);
+      }
+      .team .badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        padding: 4px 9px;
+        border-radius: 999px;
+      }
+      .team .badge.critical {
+        background: var(--critical-soft);
+        color: var(--critical);
+      }
+      .team .badge.alert {
+        background: rgba(242, 169, 59, 0.12);
+        color: var(--alert);
+      }
+      .team .badge.watch {
+        background: rgba(124, 136, 147, 0.12);
+        color: var(--muted);
+      }
+      .team .badge.healthy {
+        background: rgba(62, 154, 209, 0.12);
+        color: var(--calm);
+      }
+      .ind {
+        display: grid;
+        grid-template-columns: 64px 1fr 52px;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 7px;
+      }
+      .ind .k {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .ind svg {
+        width: 100%;
+        height: 22px;
+        display: block;
+      }
+      .ind .z {
+        font-size: 11px;
+        text-align: right;
+      }
+      .ind .z.risk {
+        color: var(--risk);
+      }
+      .ind .z.calm {
+        color: var(--calm);
+      }
+      .drivers {
+        margin-top: 10px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .drivers span {
+        font-size: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 4px;
+        padding: 3px 7px;
+        color: var(--muted);
+      }
+      .verify {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 22px 24px;
+      }
+      .verify h4 {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .verify p {
+        font-size: 13px;
+        color: var(--bone);
+        line-height: 1.7;
+      }
+      .verify p + p {
+        margin-top: 10px;
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 44px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+        color: var(--muted-2);
+        line-height: 1.7;
+      }
+      footer b {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="brand">
+          <div class="kr">조직 조류</div>
+          <div class="en">People Flow Intelligence</div>
+        </div>
+        <div class="meta">
+          <div>기준 주차</div>
+          <div class="val mono" id="asOf">—</div>
+        </div>
+      </div>
+
+      <div class="ethics" id="ethics">
+        <b>윤리 가드레일</b> · 분석 단위는 <b>팀</b>입니다(개인 감시 아님) ·
+        데이터는 <b>합성</b> 데모입니다 · 목적은 처벌 워치리스트가 아니라
+        경영진의 <b>지원적 주의</b>를 위한 약신호입니다.
+      </div>
+
+      <div class="hero">
+        <div class="card">
+          <div class="tide-t">조직 이탈압력 조류 · 12주</div>
+          <div class="tide-net mono" id="tideNet">—</div>
+          <div class="tide-sub" id="tideSub">—</div>
+          <svg class="spark" id="tideSpark"></svg>
+        </div>
+        <div class="card signal-hero" id="signalHero"></div>
+      </div>
+
+      <div class="eyebrow">
+        <span class="num">02</span>
+        <h2>팀별 약신호</h2>
+        <div class="rule"></div>
+      </div>
+      <div class="teams" id="teamGrid"></div>
+
+      <div class="eyebrow">
+        <span class="num">VF</span>
+        <h2>흐름 검증 · Confluence</h2>
+        <div class="rule"></div>
+      </div>
+      <div class="verify" id="verifyNote"></div>
+
+      <footer>
+        <b>커널 재사용</b> · 신호 판정(zlast·tierOf)은 money flow의
+        signal_engine.js를 그대로 씀 — 약신호를 읽는 수학은 도메인 불변(동형)<br />
+        <b>판정</b> · 각 팀 자신의 12주 기준선 대비 z-score · 단일 지표는
+        노이즈, 위험 약신호가 정렬될 때 신호 · Watch/Alert/Critical<br />
+        <b>경계</b> · 합성 데모 데이터 · 팀 단위 집계 · 지원 목적
+      </footer>
+    </div>
+
+    <!-- 커널(머니플로 signal_engine) → HR 어댑터(hr_engine) → 데이터 순으로 로드 -->
+    <script src="signal_engine.js"></script>
+    <script src="hr_engine.js"></script>
+    <script src="hr_data.js"></script>
+    <script>
+      const HR = window.HR_DATA;
+      const SIGNALS = buildHRSignals(HR);
+      const sigByScope = {};
+      SIGNALS.forEach((s) => (sigByScope[s.scope] = s));
+
+      const fmt1 = (n) => (n >= 0 ? "+" : "−") + Math.abs(n).toFixed(1);
+
+      // 소형 스파크라인(다이버징 막대)
+      function spark(arr, riskUp) {
+        const W = 200,
+          H = 22,
+          mid = H / 2;
+        const max = Math.max(...arr.map((v) => Math.abs(v - arr[0]))) || 1;
+        const bw = W / arr.length;
+        let inner = "";
+        arr.forEach((v, i) => {
+          const d = v - arr[0]; // 기준선 대비 변화
+          const risk = riskUp ? d : -d; // 위험 방향이면 적색
+          const h = (Math.abs(d) / max) * (H / 2 - 1);
+          const y = risk >= 0 ? mid - h : mid;
+          const col = risk >= 0 ? "var(--risk)" : "var(--calm)";
+          inner += `<rect x="${i * bw + bw * 0.2}" y="${y}" width="${bw * 0.6}" height="${h}" rx="1" fill="${col}" opacity="0.85"/>`;
+        });
+        return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--line)"/>${inner}</svg>`;
+      }
+
+      // ── 조직 tide ──
+      const org = HR.org;
+      document.getElementById("asOf").textContent = HR.as_of;
+      const p = org.attrition_pressure;
+      const delta = p[p.length - 1] - p[0];
+      document.getElementById("tideNet").textContent = fmt1(delta);
+      document.getElementById("tideNet").style.color =
+        delta >= 0 ? "var(--risk)" : "var(--calm)";
+      document.getElementById("tideSub").innerHTML =
+        `이탈압력 12주 변화 · 현재 <b style="color:var(--bone)">${p[p.length - 1].toFixed(0)}</b> · 몰입 ${org.engagement[org.engagement.length - 1].toFixed(0)}`;
+      document.getElementById("tideSpark").innerHTML = spark(p, true);
+
+      // ── 헤로 신호 ──
+      const top = SIGNALS[0];
+      const gradeMap = {
+        critical: ["A", "3개 약신호 정렬 — 즉시 지원 검토"],
+        alert: ["B", "약신호 정렬 — 주의 관찰"],
+        watch: ["C", "단일 약신호 — 관찰 단계"],
+      };
+      const [grade, gtext] = gradeMap[top.tier];
+      const tierKr = { critical: "CRITICAL", alert: "ALERT", watch: "WATCH" }[
+        top.tier
+      ];
+      document.getElementById("signalHero").innerHTML = `
+        <div>
+          <span class="tier-tag ${top.tier}">● ${tierKr}</span>
+          <h3>${top.scope} · ${top.drivers.join(" · ")}</h3>
+          <p>자기 기준선 대비 z=${top.z.toFixed(1)}의 약신호가 <b style="color:var(--bone)">${top.conf}개</b> 방향 정렬됐습니다. ${top.level === "org" ? "조직 전반" : "팀"} 차원의 주의가 필요합니다.</p>
+        </div>
+        <div class="conf">
+          <span class="grade mono" style="color:${top.tier === "critical" ? "var(--critical)" : "var(--alert)"}">${grade}</span>
+          <span class="gm">신뢰등급 <b>${grade}</b> · 정합 약신호 <b>${top.conf}개</b><br>${gtext}</span>
+        </div>`;
+
+      // ── 팀 그리드 ──
+      document.getElementById("teamGrid").innerHTML = HR.teams
+        .map((t) => {
+          const sig = sigByScope[t.name];
+          const tier = sig ? sig.tier : "healthy";
+          const badge = sig ? tierKrOf(tier) : "건강";
+          const inds = [
+            ["초과근무", t.overtime, true],
+            ["협업", t.collab, false],
+            ["eNPS", t.enps, false],
+          ];
+          const indHtml = inds
+            .map(([k, arr, riskUp]) => {
+              const z = zlast(arr) * (riskUp ? 1 : -1); // 위험 방향 z
+              const cls = z >= 1 ? "risk" : z <= -1 ? "calm" : "";
+              return `<div class="ind"><span class="k">${k}</span>${spark(arr, riskUp)}<span class="z mono ${cls}">${fmt1(z)}</span></div>`;
+            })
+            .join("");
+          const drivers = sig
+            ? `<div class="drivers">${sig.drivers.map((d) => `<span>${d}</span>`).join("")}</div>`
+            : `<div class="drivers"><span style="color:var(--calm)">정렬된 약신호 없음</span></div>`;
+          return `<div class="team ${tier}">
+            <div class="th">
+              <div><div class="name">${t.name}</div><div class="sz">${t.size}명</div></div>
+              <span class="badge ${tier}">${badge}</span>
+            </div>
+            ${indHtml}${drivers}
+          </div>`;
+        })
+        .join("");
+
+      function tierKrOf(t) {
+        return {
+          critical: "CRITICAL",
+          alert: "ALERT",
+          watch: "WATCH",
+          healthy: "건강",
+        }[t];
+      }
+
+      // ── 검증 노트 ──
+      const crit = SIGNALS.filter((s) => s.tier === "critical").length;
+      document.getElementById("verifyNote").innerHTML = `
+        <h4>단일 지표를 믿지 않는다 — 약신호 교차 확인</h4>
+        <p>같은 z 크기여도 <b style="color:var(--bone)">정렬된 약신호의 수</b>가 등급을 가릅니다. 초과근무만 오른 팀은 노이즈일 수 있지만, 초과근무↑·협업↓·eNPS↓가 <b style="color:var(--risk)">함께</b> 움직이면 진짜 신호입니다. 현재 Critical ${crit}건.</p>
+        <p>판정은 횡단면(팀 간 비교)이 아니라 각 팀 <b>자신의 12주 시계열</b> 기준입니다 — 내향적인 팀의 낮은 협업은 신호가 아니라, 그 팀 자신의 기준선에서의 하락이 신호입니다(ergodicity). 사람을 서로 비교하지 않습니다.</p>`;
+    </script>
+  </body>
+</html>
