@@ -17,7 +17,8 @@ fi
 
 mkdir -p docs
 # 화면·엔진(소스) + 생성 데이터(발행본). docs/는 gitignore 대상이 아니므로 커밋된다.
-cp dashboard/index.html docs/index.html
+# 머니플로 화면 — 상호 링크 경로를 Pages 구조로 재작성(../hr/index.html → hr/)
+sed 's#\.\./hr/index\.html#hr/#' dashboard/index.html > docs/index.html
 cp dashboard/signal_engine.js docs/signal_engine.js
 cp dashboard/research_digest.js docs/research_digest.js
 [ -f dashboard/data.js ] && cp dashboard/data.js docs/data.js || true
@@ -30,7 +31,10 @@ mkdir -p docs/hr
 cp dashboard/signal_engine.js docs/hr/signal_engine.js
 cp hr/hr_engine.js docs/hr/hr_engine.js
 cp hr/hr_data.js docs/hr/hr_data.js
-sed 's#\.\./dashboard/signal_engine\.js#signal_engine.js#' hr/index.html > docs/hr/index.html
+# 엔진 경로 + 상호 링크(../dashboard/index.html → ../) 를 Pages 구조로 재작성
+sed -e 's#\.\./dashboard/signal_engine\.js#signal_engine.js#' \
+    -e 's#\.\./dashboard/index\.html#../#' \
+    hr/index.html > docs/hr/index.html
 
 git add docs
 if git diff --cached --quiet; then
