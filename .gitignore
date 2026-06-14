@@ -12,6 +12,8 @@
 /backtest/history.json
 /backtest/ledger.jsonl
 /backtest/edge_status.json
+# HR 모듈: 루트 중간 산출물만 무시(hr/hr_data.js 합성 데모는 커밋해 데모 동작)
+/hr_data.json
 
 # 파이썬
 __pycache__/
