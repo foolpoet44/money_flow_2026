@@ -26,6 +26,7 @@
 실행:  python collector/collector.py   →  ./data.json
 """
 
+import os
 import json
 import time
 import urllib.request
@@ -187,11 +188,21 @@ def main():
         "sector": {"name": SECTOR_NAME, "stocks": stocks},
     }
 
-    _validate(data)  # 계약 위반이면 여기서 중단 — 깨진 data.json을 내보내지 않는다
+    _validate(data)  # 계약 위반이면 여기서 중단 — 깨진 출력물을 내보내지 않는다
 
-    with open("data.json", "w", encoding="utf-8") as fp:
-        json.dump(data, fp, ensure_ascii=False, indent=2)
-    print(f"✓ data.json 생성 완료 · 기준일 {data['as_of']} · 거래일 {N_TRADING_DAYS}개")
+    # 출력 경로는 collector.py 위치 기준으로 잡아 CWD에 흔들리지 않게 한다.
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)                              # 리포 루트
+    json_path = os.path.join(root, "data.json")              # 계약 정본(디버깅·방식 A용)
+    js_path = os.path.join(root, "dashboard", "data.js")     # 대시보드 입력(방식 B)
+
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    with open(json_path, "w", encoding="utf-8") as fp:
+        fp.write(payload)
+    # 방식 B(§6): 대시보드가 <script src="data.js">로 바로 읽는다. file://에서도 동작.
+    with open(js_path, "w", encoding="utf-8") as fp:
+        fp.write("window.DATA = " + payload + ";\n")
+    print(f"✓ data.json + dashboard/data.js 생성 완료 · 기준일 {data['as_of']} · 거래일 {N_TRADING_DAYS}개")
 
 
 if __name__ == "__main__":
