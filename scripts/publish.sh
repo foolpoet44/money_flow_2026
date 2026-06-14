@@ -24,6 +24,14 @@ cp dashboard/research_digest.js docs/research_digest.js
 [ -f dashboard/research.js ] && cp dashboard/research.js docs/research.js || true
 touch docs/.nojekyll   # Jekyll 빌드 비활성(정적 파일 그대로 서빙)
 
+# ── HR 대시보드(조직 조류) 발행 → docs/hr/ ──
+# 커널(signal_engine)을 같은 폴더에 복사하고 index.html의 상대경로를 재작성한다.
+mkdir -p docs/hr
+cp dashboard/signal_engine.js docs/hr/signal_engine.js
+cp hr/hr_engine.js docs/hr/hr_engine.js
+cp hr/hr_data.js docs/hr/hr_data.js
+sed 's#\.\./dashboard/signal_engine\.js#signal_engine.js#' hr/index.html > docs/hr/index.html
+
 git add docs
 if git diff --cached --quiet; then
   echo "발행본 변경 없음 — 생략"

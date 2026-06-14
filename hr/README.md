@@ -11,6 +11,8 @@ node   hr/hr_engine.test.js  # HR 신호 엔진 단위 테스트
 open   hr/index.html         # 조직 조류 대시보드 (브라우저로 바로)
 ```
 
+**라이브:** https://foolpoet44.github.io/money_flow_2026/hr/ (GitHub Pages 발행)
+
 ## 왜 이 도메인인가
 
 머니플로 백테스트는 공개·후행 데이터엔 투자 엣지가 없음을 보였다(`backtest/`). 반면
@@ -68,8 +70,32 @@ HR은 **사용자가 실제 도메인 엣지를 가진** 곳이고, 자동화가
 4. **합성 데이터.** 본 데모는 전부 합성이다. 실 데이터 연결 시 익명화·집계·동의·접근통제가
    전제다.
 
-## 실데이터 연결 (향후)
+## 실데이터 어댑터 (`hr_adapter.py`)
 
-`hr_synth.py`의 합성 출력 자리에 실제 소스(HRIS·근태·펄스서베이·협업로그)를 **팀 단위로
-집계**해 같은 계약(hr_data 스키마)으로 채우면 엔진·대시보드는 그대로 동작한다 —
-머니플로가 collector만 바꿔 끼웠듯이.
+합성 생성기 자리에 끼우는 CSV 어댑터. 현실적인 원천(HRIS·근태·협업로그·펄스서베이의
+CSV 내보내기)을 **팀 단위로 집계**해 같은 hr_data 계약을 만든다 — 머니플로가 collector만
+갈아끼웠던 것과 동형. 엔진·대시보드는 한 줄도 안 바뀐다.
+
+```bash
+python hr/hr_adapter.py --make-sample   # (데모) 합성 팀 시계열을 개인 단위 CSV로 역집계
+python hr/hr_adapter.py                  # CSV → hr_data.json + hr/hr_data.js
+```
+
+**입력 CSV 스키마** (`hr/sample_data/`에 샘플 동봉):
+
+| 파일            | 컬럼                            | 비고                 |
+| --------------- | ------------------------------- | -------------------- |
+| `roster.csv`    | person_id, team                 | 사람→팀 매핑         |
+| `overtime.csv`  | person_id, week, overtime_hours | 근태/근무시간        |
+| `collab.csv`    | person_id, week, collab_score   | 협업로그(0~100)      |
+| `enps.csv`      | person_id, week, enps           | 펄스서베이(−100~100) |
+| `headcount.csv` | week, net                       | 주간 순증감          |
+
+**코드로 강제하는 윤리:**
+
+- **k-익명성** — 팀 인원이 `MIN_TEAM_SIZE`(기본 5) 미만이면 집계에서 제외(개인 식별 방지).
+- **개인 식별자 미보존** — 집계 후 person_id를 출력에 남기지 않는다.
+- 개인 단위 점수·랭킹을 만들지 않는다.
+
+검증: 합성 팀 시계열 → 개인 CSV(32명, 멤버 오프셋 합=0) → 어댑터 재집계 → **동일 신호
+그라데이션** 복원(왕복 정합성). 실제 HRIS 연결 시엔 익명화·동의·접근통제가 전제다.
