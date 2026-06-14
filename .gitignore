@@ -3,6 +3,8 @@ data.json
 data.js
 collector/data.json
 dashboard/data.js
+research.json
+dashboard/research.js
 
 # 파이썬
 __pycache__/

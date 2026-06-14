@@ -603,6 +603,82 @@
         color: var(--muted);
       }
 
+      /* ---- 리서치 다이제스트 ---- */
+      .research {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .report {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .report.sector {
+        border-left: 3px solid var(--alert);
+      }
+      .report .rhead {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .report .cat {
+        font-size: 9.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        padding: 2px 6px;
+        flex-shrink: 0;
+      }
+      .report.sector .cat {
+        color: var(--alert);
+        border-color: rgba(242, 169, 59, 0.4);
+      }
+      .report .rtitle {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .report .rstock {
+        color: var(--inflow);
+        font-weight: 700;
+      }
+      .report .rmeta {
+        font-size: 11px;
+        color: var(--muted-2);
+      }
+      .report .rmeta b {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .report .rsum {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .report .rlinks {
+        display: flex;
+        gap: 14px;
+        margin-top: 2px;
+      }
+      .report .rlinks a {
+        font-size: 11px;
+        color: var(--outflow);
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+      }
+      .report .rlinks a:hover {
+        border-bottom-color: var(--outflow);
+      }
+
       footer {
         margin-top: 46px;
         padding-top: 20px;
@@ -746,14 +822,22 @@
       </div>
       <div class="verify" id="verifyNote"></div>
 
+      <!-- RESEARCH DIGEST (별도 모듈 · window.RESEARCH 없으면 숨김) -->
+      <div class="eyebrow" id="researchEyebrow" style="display: none">
+        <span class="num">RD</span>
+        <h2>리서치 다이제스트 · 증권사 리포트</h2>
+        <div class="rule"></div>
+      </div>
+      <div class="research" id="researchList"></div>
+
       <footer>
-        <b>데이터 소스</b> · pykrx (KRX/네이버 스크래핑, API 키 불필요) · 일
-        단위 배치<br />
+        <b>데이터 소스</b> · 네이버 금융 JSON API(수급·지수) + 네이버
+        리서치(증권사 리포트) · 익명 스크래핑, 일 단위 배치<br />
         <b>신호 등급</b> · 각 지표 자신의 30거래일 시계열 분포 기준 z-score ·
         Watch(단일 약신호) / Alert(2조류 정렬) / Critical(3조류 정렬 또는 ±2σ
         극단)<br />
         <b>구조</b> · Signal Generation → Confluence Verification → Actionable
-        Intelligence · 본 화면은 시연용 합성 데이터 기반
+        Intelligence · 리서치 요약은 리포트 원문 추출형(AI 생성 아님)
       </footer>
     </div>
 
@@ -763,6 +847,9 @@
 
     <!-- 신호 엔진(§5 정본). 순수함수 — 브라우저/Node 공유. 메인 스크립트보다 먼저 로드. -->
     <script src="signal_engine.js"></script>
+
+    <!-- 리서치 다이제스트(별도 모듈). research_collector.py가 생성. 없으면 섹션 숨김. -->
+    <script src="research.js"></script>
 
     <script>
       /* =========================================================
@@ -1074,6 +1161,48 @@
     <p>판정 기준은 횡단면(남들 대비)이 아니라 각 지표 자신의 30거래일 시계열 분포입니다 — ergodicity 관점에서, 흐름의 비정상성은 "그 자산 자신의 역사"에 대해서만 정의됩니다.</p>`;
       }
 
+      /* ---- 리서치 다이제스트 (window.RESEARCH 소비, 없으면 섹션 숨김) ---- */
+      function renderResearch() {
+        const R = typeof window.RESEARCH !== "undefined" && window.RESEARCH;
+        if (!R || !R.reports || !R.reports.length) return; // 데이터 없으면 그대로 숨김
+        const esc = (s) =>
+          String(s == null ? "" : s).replace(
+            /[<>&]/g,
+            (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c],
+          );
+        document.getElementById("researchEyebrow").style.display = "";
+        // collector가 섹터연관·시황 우선으로 정렬해 둠 → 상위 12건만 노출
+        const items = R.reports.slice(0, 12);
+        document.getElementById("researchList").innerHTML = items
+          .map((r) => {
+            const stock = r.stock
+              ? `<span class="rstock">${esc(r.stock)}</span> `
+              : "";
+            const tgt = r.target ? ` · 목표 ${esc(r.target)}` : "";
+            const op = r.opinion ? ` · ${esc(r.opinion)}` : "";
+            const views = r.views ? ` · 조회 ${r.views.toLocaleString()}` : "";
+            const sum = r.summary
+              ? `<div class="rsum">${esc(r.summary)}</div>`
+              : "";
+            const pdf = r.pdf
+              ? `<a href="${r.pdf}" target="_blank" rel="noopener">PDF 원본 ↗</a>`
+              : "";
+            return `<div class="report ${r.sector ? "sector" : ""}">
+      <div class="rhead">
+        <span class="cat">${esc(r.category_label)}</span>
+        <span class="rtitle">${stock}${esc(r.title)}</span>
+      </div>
+      <div class="rmeta"><b>${esc(r.broker) || "증권사 미상"}</b> · ${r.date}${tgt}${op}${views}</div>
+      ${sum}
+      <div class="rlinks">
+        <a href="${r.url}" target="_blank" rel="noopener">상세 ↗</a>
+        ${pdf}
+      </div>
+    </div>`;
+          })
+          .join("");
+      }
+
       /* ---- init + 토글 ---- */
       function renderAll() {
         renderTide();
@@ -1089,6 +1218,7 @@
       renderSignalGrid();
       renderSector();
       renderVerify();
+      renderResearch();
       renderAll();
       document.getElementById("mktToggle").addEventListener("click", (e) => {
         const b = e.target.closest("button");
