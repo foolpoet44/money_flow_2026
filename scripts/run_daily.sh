@@ -49,4 +49,10 @@ node dashboard/signal_engine.test.js >>"$LOG" 2>&1
 log "다이제스트 생성"
 node scripts/digest.js | tee -a "$LOG"
 
+# 5) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
+log "대시보드 발행 (GitHub Pages)"
+if ! scripts/publish.sh >>"$LOG" 2>&1; then
+  log "⚠ 발행 실패(푸시 권한/네트워크) — Pages만 미갱신, 로컬·텔레그램은 정상"
+fi
+
 log "── 데일리 사이클 완료 ──"

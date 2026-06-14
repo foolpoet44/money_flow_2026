@@ -86,11 +86,22 @@ if (research && research.reports && research.reports.length) {
     L.push(`   ${r.pdf || r.url}`);
   });
 }
+// 대시보드 링크 — 텔레그램에서 탭하면 실시간 화면(GitHub Pages)을 연다
+const DASH =
+  process.env.DASHBOARD_URL || "https://foolpoet44.github.io/money_flow_2026/";
 L.push("");
+L.push(`📈 대시보드: ${DASH}`);
 L.push("— 자금 조류 자동 다이제스트");
 
 const text = L.join("\n");
 console.log(text);
+
+// 봇(/dashboard 응답)이 읽을 최신 다이제스트 캐시 저장
+try {
+  fs.writeFileSync(path.join(ROOT, "scripts/last_digest.txt"), text);
+} catch {
+  /* 캐시 저장 실패는 치명적이지 않음 */
+}
 
 // ── 텔레그램 전송 (opt-in · §8 Alert 이상만) ──
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
