@@ -8,10 +8,11 @@
 /dashboard/research.js
 # 다이제스트 캐시(봇이 읽는 최신 다이제스트)
 /scripts/last_digest.txt
-# 백테스트 데이터 산출물(코드만 추적, 데이터는 재생성/누적)
+# 백테스트 데이터 산출물.
+# history.json 은 fetch_history 로 재생성 가능 → 무시.
+# ledger.jsonl 은 시점불변 OOS 증거라 재생성 불가 → git 으로 영속화(커밋 추적).
+# edge_status.json 은 ledger 파생물이지만 발행 대시보드의 OOS 현황 일관성을 위해 함께 추적.
 /backtest/history.json
-/backtest/ledger.jsonl
-/backtest/edge_status.json
 # HR 모듈: 루트 중간 산출물만 무시(hr/hr_data.js 합성 데모는 커밋해 데모 동작)
 /hr_data.json
 
