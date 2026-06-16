@@ -39,8 +39,14 @@ sed -e 's#\.\./dashboard/signal_engine\.js#signal_engine.js#' \
 git add docs
 # OOS 원장(재생성 불가한 시점불변 증거)과 그 파생 현황도 함께 커밋해 누적을 영속화한다.
 # 무인 클라우드 실행(GitHub Actions)은 매번 빈 디스크로 시작하므로, git 이 유일한 누적 매체다.
-[ -f backtest/ledger.jsonl ] && git add backtest/ledger.jsonl || true
-[ -f backtest/edge_status.json ] && git add backtest/edge_status.json || true
+# if 로 분기해 "파일 없음"은 안전히 건너뛰되, 파일이 있는데 git add 가 실패하면(lock·권한 등)
+# set -e 로 파이프라인을 중단시킨다 — 원장 유실을 조용히 넘기지 않는다.
+if [ -f backtest/ledger.jsonl ]; then
+  git add backtest/ledger.jsonl
+fi
+if [ -f backtest/edge_status.json ]; then
+  git add backtest/edge_status.json
+fi
 if git diff --cached --quiet; then
   echo "발행본 변경 없음 — 생략"
 else
