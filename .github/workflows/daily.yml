@@ -1,0 +1,69 @@
+# =========================================================
+# 자금 조류 · 데일리 무인 파이프라인 (GitHub Actions)
+# ---------------------------------------------------------
+# 기존 로컬 launchd(scripts/com.moneyflow.daily.plist)를 대체하는 클라우드 스케줄러.
+# 단일 출처인 scripts/run_daily.sh 를 그대로 호출한다:
+#   수집(수급+리서치) → 신호 엔진 테스트 게이트 → 원장 적재/정산 →
+#   다이제스트(→ 텔레그램 opt-in) → publish.sh(docs/ 커밋·푸시 → Pages 자동 배포)
+#
+# 트리거:
+#   · cron  — 평일 08:00 KST (= 23:00 UTC 전일, 월~금 = UTC 일~목)
+#   · 수동  — Actions 탭 "Run workflow" (workflow_dispatch)
+#
+# 텔레그램(opt-in): 리포 Secrets 에 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 등록 시 전송.
+#   미설정이면 digest 는 출력만 하고 전송하지 않는다(§8: Alert 이상만 푸시).
+#
+# 주의: collector 는 네이버 금융 스크래핑이므로 러너의 아웃바운드 네트워크가
+#       네이버에 닿아야 한다. 수집 실패 시 run_daily.sh 가 중단되어(set -e)
+#       잡이 실패로 표시되며, 직전 발행본(docs/)은 그대로 유지된다(거짓 데이터 미발행).
+# =========================================================
+name: daily-money-flow
+
+on:
+  schedule:
+    # 분 시 일 월 요일 (UTC). 23:00 UTC 일~목 = 08:00 KST 월~금.
+    - cron: "0 23 * * 0-4"
+  workflow_dispatch: {}
+
+# docs/ 를 main 에 커밋·푸시하기 위해 쓰기 권한 필요.
+permissions:
+  contents: write
+
+# 동시 실행 방지(이전 실행이 끝나기 전 새 실행이 겹치지 않도록).
+concurrency:
+  group: daily-money-flow
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run daily cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+        run: |
+          chmod +x scripts/run_daily.sh scripts/publish.sh
+          scripts/run_daily.sh
