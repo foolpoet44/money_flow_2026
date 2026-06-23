@@ -3,3 +3,4 @@
 {"as_of":"2026-06-18","logged_at":"2026-06-18T00:18:23.165Z","signals":[]}
 {"as_of":"2026-06-19","logged_at":"2026-06-19T00:29:25.559Z","signals":[{"scope":"삼성전기","tier":"alert","z":1.49,"conf":2,"dir":1},{"scope":"한미반도체","tier":"alert","z":1.26,"conf":1,"dir":1},{"scope":"삼성전자","tier":"alert","z":1.22,"conf":2,"dir":1}]}
 {"as_of":"2026-06-22","logged_at":"2026-06-22T00:14:34.140Z","signals":[{"scope":"한미반도체","tier":"critical","z":7.76,"conf":1,"dir":1},{"scope":"SK스퀘어","tier":"alert","z":1.98,"conf":1,"dir":-1}]}
+{"as_of":"2026-06-23","logged_at":"2026-06-23T00:09:21.478Z","signals":[{"scope":"SK스퀘어","tier":"alert","z":1.8,"conf":1,"dir":-1}]}
