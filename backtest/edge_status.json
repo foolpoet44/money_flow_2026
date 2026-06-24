@@ -6,7 +6,7 @@
   "horizons": {
     "1": {
       "n": 8,
-      "meanPct": 2.01,
+      "meanPct": -1.45,
       "verdict": "표본부족"
     },
     "5": {
