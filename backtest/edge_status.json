@@ -1,17 +1,17 @@
 {
-  "updated_for": "2026-06-25",
-  "live_records": 7,
+  "updated_for": "2026-06-26",
+  "live_records": 8,
   "settled": 16,
   "pending": 23,
   "horizons": {
     "1": {
       "n": 11,
-      "meanPct": -1.3,
+      "meanPct": -1.03,
       "verdict": "표본부족"
     },
     "5": {
       "n": 5,
-      "meanPct": 1.59,
+      "meanPct": 2.03,
       "verdict": "표본부족"
     },
     "10": {
