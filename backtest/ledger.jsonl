@@ -7,3 +7,4 @@
 {"as_of":"2026-06-25","logged_at":"2026-06-25T00:16:06.062Z","signals":[{"scope":"SK하이닉스","tier":"critical","z":2.71,"conf":1,"dir":-1},{"scope":"SK스퀘어","tier":"alert","z":1.39,"conf":1,"dir":-1}]}
 {"as_of":"2026-06-26","logged_at":"2026-06-26T00:11:57.309Z","signals":[]}
 {"as_of":"2026-06-29","logged_at":"2026-06-29T00:12:13.052Z","signals":[{"scope":"SK하이닉스","tier":"alert","z":1.34,"conf":2,"dir":-1}]}
+{"as_of":"2026-06-30","logged_at":"2026-07-01T00:06:50.190Z","signals":[{"scope":"삼성전기","tier":"alert","z":1.29,"conf":2,"dir":1},{"scope":"SK스퀘어","tier":"alert","z":1.27,"conf":1,"dir":-1}]}
