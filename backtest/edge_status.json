@@ -6,17 +6,17 @@
   "horizons": {
     "1": {
       "n": 19,
-      "meanPct": -0.09,
+      "meanPct": 0.47,
       "verdict": "노이즈(유의X)"
     },
     "5": {
       "n": 14,
-      "meanPct": 1.14,
+      "meanPct": 1.41,
       "verdict": "표본부족"
     },
     "10": {
       "n": 10,
-      "meanPct": -5.9,
+      "meanPct": -5.82,
       "verdict": "표본부족"
     }
   }
