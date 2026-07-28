@@ -1,12 +1,12 @@
 {
   "updated_for": "2026-07-28",
   "live_records": 25,
-  "settled": 68,
-  "pending": 13,
+  "settled": 69,
+  "pending": 12,
   "horizons": {
     "1": {
-      "n": 26,
-      "meanPct": -1.4,
+      "n": 27,
+      "meanPct": -0.76,
       "verdict": "노이즈(유의X)"
     },
     "5": {
