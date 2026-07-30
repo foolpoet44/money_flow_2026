@@ -1,8 +1,8 @@
 {
-  "updated_for": "2026-07-28",
-  "live_records": 25,
+  "updated_for": "2026-07-29",
+  "live_records": 26,
   "settled": 69,
-  "pending": 12,
+  "pending": 15,
   "horizons": {
     "1": {
       "n": 27,
