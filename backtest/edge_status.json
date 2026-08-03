@@ -1,22 +1,22 @@
 {
-  "updated_for": "2026-07-30",
-  "live_records": 27,
-  "settled": 74,
-  "pending": 10,
+  "updated_for": "2026-07-31",
+  "live_records": 28,
+  "settled": 77,
+  "pending": 19,
   "horizons": {
     "1": {
-      "n": 27,
-      "meanPct": -0.76,
+      "n": 28,
+      "meanPct": 0.33,
       "verdict": "노이즈(유의X)"
     },
     "5": {
-      "n": 25,
-      "meanPct": -0.82,
+      "n": 26,
+      "meanPct": -1.13,
       "verdict": "노이즈(유의X)"
     },
     "10": {
-      "n": 22,
-      "meanPct": -0.8,
+      "n": 23,
+      "meanPct": -0.84,
       "verdict": "노이즈(유의X)"
     }
   }
