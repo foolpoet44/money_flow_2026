@@ -6,7 +6,7 @@
   "horizons": {
     "1": {
       "n": 32,
-      "meanPct": 0.57,
+      "meanPct": 0.4,
       "verdict": "노이즈(유의X)"
     },
     "5": {
