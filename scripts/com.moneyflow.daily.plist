@@ -6,7 +6,7 @@
          launchctl load ~/Library/LaunchAgents/com.moneyflow.daily.plist
   해제:  launchctl unload ~/Library/LaunchAgents/com.moneyflow.daily.plist
 
-  평일(월~금) 08:00 (시스템 로컬시간 = KST) 1회 실행.
+  평일(월~금) 16:00 (시스템 로컬시간 = KST) 1회 실행 — 정규장 마감(15:30) 이후.
   비밀키는 plist가 아니라 scripts/run_daily.env에서 로드된다.
 -->
 <plist version="1.0">
@@ -21,14 +21,14 @@
       <string>/Users/dkmac/Desktop/@26/money_flow_2606/scripts/run_daily.sh</string>
     </array>
 
-    <!-- 평일 08:00 (월=1 … 금=5) -->
+    <!-- 평일 16:00 (월=1 … 금=5) · 장 마감 후라야 당일 세션이 확정된다 -->
     <key>StartCalendarInterval</key>
     <array>
-      <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-      <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-      <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-      <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-      <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+      <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>StandardOutPath</key>

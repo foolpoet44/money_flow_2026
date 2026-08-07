@@ -17,24 +17,19 @@ fi
 
 mkdir -p docs
 # 화면·엔진(소스) + 생성 데이터(발행본). docs/는 gitignore 대상이 아니므로 커밋된다.
-# 머니플로 화면 — 상호 링크 경로를 Pages 구조로 재작성(../hr/index.html → hr/)
-sed 's#\.\./hr/index\.html#hr/#' dashboard/index.html > docs/index.html
+cp dashboard/index.html docs/index.html
 cp dashboard/signal_engine.js docs/signal_engine.js
 cp dashboard/research_digest.js docs/research_digest.js
 [ -f dashboard/data.js ] && cp dashboard/data.js docs/data.js || true
 [ -f dashboard/research.js ] && cp dashboard/research.js docs/research.js || true
-touch docs/.nojekyll   # Jekyll 빌드 비활성(정적 파일 그대로 서빙)
 
-# ── HR 대시보드(조직 조류) 발행 → docs/hr/ ──
-# 커널(signal_engine)을 같은 폴더에 복사하고 index.html의 상대경로를 재작성한다.
-mkdir -p docs/hr
-cp dashboard/signal_engine.js docs/hr/signal_engine.js
-cp hr/hr_engine.js docs/hr/hr_engine.js
-cp hr/hr_data.js docs/hr/hr_data.js
-# 엔진 경로 + 상호 링크(../dashboard/index.html → ../) 를 Pages 구조로 재작성
-sed -e 's#\.\./dashboard/signal_engine\.js#signal_engine.js#' \
-    -e 's#\.\./dashboard/index\.html#../#' \
-    hr/index.html > docs/hr/index.html
+# OOS 정산 현황 → 방식 B(§6)로 화면에 노출. 그동안 edge_status.json 은 텔레그램에만 나갔고
+# 대시보드는 등급 A/B/C 만 자신 있게 보여줬다. "그 신호가 실제로 돈이 됐는가"를 같은 화면에 둔다.
+if [ -f backtest/edge_status.json ]; then
+  { printf 'window.EDGE = '; cat backtest/edge_status.json; printf ';\n'; } > dashboard/edge.js
+  cp dashboard/edge.js docs/edge.js
+fi
+touch docs/.nojekyll   # Jekyll 빌드 비활성(정적 파일 그대로 서빙)
 
 git add docs
 # OOS 원장(재생성 불가한 시점불변 증거)과 그 파생 현황도 함께 커밋해 누적을 영속화한다.
@@ -51,6 +46,10 @@ if git diff --cached --quiet; then
   echo "발행본 변경 없음 — 생략"
 else
   git commit -q -m "chore(pages): 대시보드 발행본 갱신"
-  git push -q origin main
-  echo "✓ 발행·푸시 완료 → https://foolpoet44.github.io/money_flow_2026/"
+  # 푸시 대상은 '지금 체크아웃된 브랜치'다. main 하드코딩이면 브랜치에서 파이프라인을
+  # 검증할 수 없고(수정본을 돌려봐도 결과가 main 으로 나간다), 검증 없이 main 에 합치는
+  # 것 말고는 선택지가 없어진다. 정기 실행은 main 을 체크아웃하므로 동작은 그대로다.
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  git push -q origin "HEAD:${BRANCH}"
+  echo "✓ 발행·푸시 완료(${BRANCH}) → https://foolpoet44.github.io/money_flow_2026/"
 fi

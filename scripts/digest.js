@@ -103,6 +103,12 @@ try {
         : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
     L.push(`  5일 보유: N=${h5.n} · 평균 ${m} · 판정 ${h5.verdict}`);
   }
+  // 격리 구간이 있으면 반드시 함께 알린다 — "표본 없음"과 "엣지 없음"은 다른 말이다.
+  if (es.quarantined_records) {
+    L.push(
+      `  ⚠ 2026-08-07 이전 ${es.quarantined_records}일치는 수집 결함으로 격리(증거 제외)`,
+    );
+  }
 } catch {
   /* 아직 정산 이력 없음 — 조용히 생략 */
 }

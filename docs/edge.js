@@ -1,4 +1,4 @@
-{
+window.EDGE = {
   "updated_for": "2026-08-07",
   "live_records": 0,
   "quarantined_records": 31,
@@ -23,3 +23,4 @@
     }
   }
 }
+;

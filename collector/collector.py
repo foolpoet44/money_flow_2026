@@ -27,13 +27,16 @@
 """
 
 import os
+import re
 import json
 import time
+import datetime
 import urllib.request
 import urllib.error
 
 # ── 설정 ─────────────────────────────────────────────
 N_TRADING_DAYS = 30
+FETCH_SLACK = 8    # 미확정 캔들을 버려도 30개가 남도록 넉넉히 받아온다
 SECTOR_NAME = "반도체"
 SECTOR = [
     ("005930", "삼성전자"),
@@ -94,57 +97,165 @@ def _iso(yyyymmdd):
     return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
 
 
+def _norm_date(v):
+    """'20260805' / '2026-08-05' / '2026.08.05' → '2026-08-05'. 못 읽으면 ''."""
+    s = re.sub(r"[^0-9]", "", str(v or ""))
+    return f"{s[0:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 else ""
+
+
+# 종목 trend 응답에서 거래일을 담고 있을 법한 키 후보(네이버 버전차 흡수)
+_DATE_KEYS = ("localTradedAt", "localDate", "bizdate", "tradeDate", "dt", "date")
+
+
+def _row_date(row):
+    """종목 trend 행에서 거래일 ISO를 뽑는다. 어떤 후보 키도 없으면 ''."""
+    for k in _DATE_KEYS:
+        if k in row:
+            d = _norm_date(row[k])
+            if d:
+                return d
+    return ""
+
+
+# ── 장중(미확정) 캔들 가드 ───────────────────────────
+# 왜 필요한가 (2026-08-07 사고 기록):
+#   네이버 dayCandle/trend 는 장이 열려 있는 동안에도 '오늘' 행을 내려준다. 그 값은
+#   그 시점까지의 부분 집계일 뿐인데 collector 는 이를 완결된 거래일로 취급했다.
+#   스케줄러 지연으로 수집이 개장(09:00) 뒤로 밀린 날마다 장중 스냅샷이 종가로 둔갑했고
+#   (외국인 순매수 최대 19.6배 차이, 2026-08-04 은 부호 반전), 그 값이 OOS 원장에
+#   선착순으로 박혀 영구히 정정되지 않았다.
+#   → 마감이 확정되기 전이면 '오늘' 행을 아예 계약에 들이지 않는다. 늦게 갱신될지언정
+#     틀린 수치를 내보내지 않는다(§1.5 거짓 정밀도 금지).
+KST = datetime.timezone(datetime.timedelta(hours=9))
+SESSION_CLOSE_KST = datetime.time(15, 40)  # 정규장 마감 15:30 + 집계 확정 여유 10분
+
+
+def _pending_session_date(now=None):
+    """아직 확정되지 않은 거래일(ISO). 마감 확정 이후이거나 판단 불가면 None.
+
+    비거래일에 호출돼도 무해하다 — 그 날짜를 가진 행이 애초에 없으므로 아무것도 버려지지 않는다.
+    """
+    now = now or datetime.datetime.now(KST)
+    return now.date().isoformat() if now.time() < SESSION_CLOSE_KST else None
+
+
 # ── 수집기: 지수 ─────────────────────────────────────
-def index_flow(market):
-    """지수(KOSPI/KOSDAQ)의 30거래일 종가 + 일별 외국인·기관 순매수(억원)."""
-    # 1) 종가 시계열 — 차트 API 한 번으로 거래일·종가 확보 (여유분 count로 요청)
+def index_calendar(market, pending=None):
+    """지수 차트에서 거래일→종가 맵을 얻는다. 미확정 세션은 제외.
+
+    반환: {ISO날짜: 종가}. 30일로 자르지 않는다 — 창(window) 결정은 main이 한다.
+    """
     chart_url = (f"https://api.stock.naver.com/chart/domestic/index/{market}"
                  f"?periodType=dayCandle&count={N_TRADING_DAYS + 15}")
     chart = _get_json(chart_url)
-    # priceInfos는 과거→최신 순. 최신 30거래일만 취한다.
-    rows = chart["priceInfos"][-N_TRADING_DAYS:]
-    dates_yyyymmdd = [r["localDate"] for r in rows]
-    dates = [_iso(d) for d in dates_yyyymmdd]
-    close = [round(_num(r["closePrice"])) for r in rows]
+    out = {}
+    for r in chart["priceInfos"]:          # 과거→최신 순
+        d = _iso(r["localDate"])
+        if pending and d == pending:       # 진행 중인 장중 캔들은 들이지 않는다
+            continue
+        out[d] = round(_num(r["closePrice"]))
+    return out
 
-    # 2) 투자자 수급 — 모바일 trend는 하루치만 주므로 거래일별로 루프
-    #    (지수 전체 수급의 30일 이력을 주는 단일 엔드포인트가 없어 부득이 일별 호출)
+
+def index_trend(market, dates):
+    """지수의 지정 거래일들에 대한 외국인·기관 순매수(억원).
+
+    모바일 trend는 하루치만 주므로 거래일별로 루프한다(30일 이력을 주는 단일 엔드포인트 없음).
+    """
     foreign, institution = [], []
-    for ymd in dates_yyyymmdd:
-        url = f"https://m.stock.naver.com/api/index/{market}/trend?bizdate={ymd}"
+    for d in dates:
+        url = f"https://m.stock.naver.com/api/index/{market}/trend?bizdate={d.replace('-', '')}"
         t = _get_json(url)
         foreign.append(_signed_int(t.get("foreignValue", 0)))
         institution.append(_signed_int(t.get("institutionalValue", 0)))
         time.sleep(SLEEP)
-
-    return {"dates": dates, "foreign": foreign, "institution": institution, "close": close}
+    return foreign, institution
 
 
 # ── 수집기: 종목 ─────────────────────────────────────
-def stock_flow(ticker):
-    """종목의 30거래일 외국인·기관 순매수(억원) + 외인보유율(×100)."""
-    url = f"https://m.stock.naver.com/api/stock/{ticker}/trend?pageSize={N_TRADING_DAYS}"
-    rows = _get_json(url)
-    # 응답은 최신→과거 순. 계약은 과거→최신 오름차순이므로 뒤집는다.
-    rows = list(reversed(rows))[-N_TRADING_DAYS:]
+def stock_rows(ticker, pending=None):
+    """종목 trend를 {ISO날짜: {foreign, institution, fhold}} 맵으로 반환.
 
+    왜 '맵'인가 (2026-08-07 사고 기록):
+        예전 구현은 종목 trend의 마지막 30행을 지수 날짜 배열과 '위치로' 짝지었다.
+        그런데 두 피드는 서로 다른 엔드포인트라 최신 행이 같은 세션이라는 보장이 없다.
+        실제로 발행본 히스토리를 되짚어 보면 종목 시계열이 지수 날짜 대비 한 세션씩
+        어긋나 있었다(같은 값이 스냅샷마다 다른 날짜에 붙었다 — 67거래일 중 64일 불일치).
+        계약 §4는 모든 배열이 index.*.dates에 정렬된다고 못박고 있으므로, 위치가 아니라
+        '날짜'로 맞춘다. 날짜 필드가 없는 응답 버전이면 맵을 비우고 호출자가 폴백한다.
+
+    반환: (맵, 날짜없음여부). 날짜없음이면 맵은 {} 이고 legacy 위치 정렬로 폴백해야 한다.
+    """
+    url = f"https://m.stock.naver.com/api/stock/{ticker}/trend?pageSize={N_TRADING_DAYS + FETCH_SLACK}"
+    rows = _get_json(url)
+    out = {}
+    undated = 0
+    for r in rows:
+        d = _row_date(r)
+        if not d:
+            undated += 1
+            continue
+        if pending and d == pending:   # 진행 중인 세션은 들이지 않는다
+            continue
+        close_won = _num(r["closePrice"])
+        # 순매수 '수량(주)' × 종가(원) ÷ 1e8 = 억원 근사
+        out[d] = {
+            "foreign": round(_signed_int(r.get("foreignerPureBuyQuant", 0)) * close_won / EOK),
+            "institution": round(_signed_int(r.get("organPureBuyQuant", 0)) * close_won / EOK),
+            "fhold": _ratio_x100(r.get("foreignerHoldRatio", "0%")),
+        }
+    if not out and undated:
+        return {}, True
+    return out, False
+
+
+def stock_rows_legacy(ticker, pending=None, index_dropped=False):
+    """날짜 필드가 없는 응답 버전용 폴백 — 예전처럼 위치로 정렬한다(정확도 낮음).
+
+    이 경로로 들어오면 종목-지수 정렬을 보장할 수 없으므로 반드시 경고를 남긴다.
+    """
+    url = f"https://m.stock.naver.com/api/stock/{ticker}/trend?pageSize={N_TRADING_DAYS + FETCH_SLACK}"
+    rows = list(reversed(_get_json(url)))          # 최신→과거 이므로 뒤집는다
+    if pending and index_dropped and rows:
+        rows = rows[:-1]
+    rows = rows[-N_TRADING_DAYS:]
+    if len(rows) < N_TRADING_DAYS:
+        raise RuntimeError(f"{ticker}: 거래일 {len(rows)}개 < {N_TRADING_DAYS}개 — pageSize 상향 필요")
     foreign, institution, fhold = [], [], []
     for r in rows:
         close_won = _num(r["closePrice"])
-        # 순매수 '수량(주)' × 종가(원) ÷ 1e8 = 억원 근사
-        f_qty = _signed_int(r.get("foreignerPureBuyQuant", 0))
-        i_qty = _signed_int(r.get("organPureBuyQuant", 0))
-        foreign.append(round(f_qty * close_won / EOK))
-        institution.append(round(i_qty * close_won / EOK))
+        foreign.append(round(_signed_int(r.get("foreignerPureBuyQuant", 0)) * close_won / EOK))
+        institution.append(round(_signed_int(r.get("organPureBuyQuant", 0)) * close_won / EOK))
         fhold.append(_ratio_x100(r.get("foreignerHoldRatio", "0%")))
-
     return {"foreign": foreign, "institution": institution, "fhold": fhold}
 
 
+# ── 공통 창 결정 ─────────────────────────────────────
+def common_window(cal, smaps, dated_tickers, n=N_TRADING_DAYS):
+    """모든 피드가 공통으로 관측한 최근 n거래일. 부족하면 예외.
+
+    계약 §4는 모든 배열이 index.*.dates 에 정렬됨을 요구한다. 어느 한 피드라도 그 날짜를
+    갖고 있지 않다면 그 날은 '온전히 관측된 세션'이 아니므로 창에 넣지 않는다.
+    """
+    common = set(cal["KOSPI"]) & set(cal["KOSDAQ"])
+    for tk in dated_tickers:
+        common &= set(smaps[tk])
+    window = sorted(common)[-n:]
+    if len(window) < n:
+        raise RuntimeError(
+            f"공통 확정 거래일 {len(window)}개 < {n}개 — "
+            f"조회 구간(count/pageSize)을 늘리거나 피드 상태를 확인하세요."
+        )
+    return window
+
+
 # ── 스키마 검증 (계약 §4 불변 규칙) ──────────────────
-def _validate(data):
+def _validate(data, pending=None):
     """data.json이 계약을 만족하는지 최소 검증. 실패 시 예외로 중단."""
     errs = []
+    # 미확정 세션이 계약에 새어 들어왔는가 — 장중 스냅샷 재발 방지의 최종 관문.
+    if pending and data["as_of"] == pending:
+        errs.append(f"as_of={data['as_of']}는 아직 마감 미확정 세션 — 장중 데이터 유출")
     for mkt in MARKETS:
         d = data["index"][mkt]
         for key in ("dates", "foreign", "institution", "close"):
@@ -168,27 +279,73 @@ def _validate(data):
 
 # ── 엔트리포인트 ─────────────────────────────────────
 def main():
+    pending = _pending_session_date()
+    now_kst = datetime.datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
+    if pending:
+        print(f"· 현재 {now_kst} — 마감({SESSION_CLOSE_KST:%H:%M}) 전이므로 "
+              f"{pending} 세션은 미확정으로 보고 수집에서 제외한다")
+    else:
+        print(f"· 현재 {now_kst} — 마감 확정 이후. 당일 세션 포함")
+
+    # 1) 지수 달력(거래일→종가). 수급 호출은 창이 정해진 뒤에 한다 — 불필요한 호출 절약.
+    print("· 지수 달력 수집 중…")
+    cal = {}
+    for mkt in MARKETS:
+        print(f"   - {mkt}")
+        cal[mkt] = index_calendar(mkt, pending)
+
+    # 2) 종목 수급(거래일→값 맵)
+    print("· 반도체 섹터 수집 중…")
+    smaps, legacy = {}, {}
+    for tk, nm in SECTOR:
+        print(f"   - {nm} ({tk})")
+        smaps[tk], legacy[tk] = stock_rows(tk, pending)
+        time.sleep(SLEEP)
+
+    # 3) 창 결정 — 모든 피드가 '공통으로' 관측한 거래일만 쓴다.
+    #    계약 §4는 모든 배열이 index.*.dates 에 정렬됨을 요구한다. 한 피드라도 그 날짜를
+    #    갖고 있지 않으면 그 날은 온전히 관측된 세션이 아니다 — 지어내지 않고 뒤로 물린다.
+    #    (부수효과: 종목 수급이 지수보다 늦게 게시되는 날엔 as_of 가 하루 뒤로 물러난다.
+    #     늦게 갱신될지언정 어긋난 값을 내보내지 않는다.)
+    window = common_window(cal, smaps, [tk for tk, _ in SECTOR if not legacy[tk]])
+    print(f"· 공통 확정 거래일 {len(window)}일 · {window[0]} → {window[-1]}")
+
+    # 4) 지수 수급 — 확정된 창에 대해서만 호출
     print("· 지수 수급 수집 중…")
     index = {}
     for mkt in MARKETS:
         print(f"   - {mkt}")
-        index[mkt] = index_flow(mkt)
+        f, i = index_trend(mkt, window)
+        index[mkt] = {
+            "dates": window[:],
+            "foreign": f,
+            "institution": i,
+            "close": [cal[mkt][d] for d in window],
+        }
 
-    print("· 반도체 섹터 수집 중…")
+    # 5) 종목 배열을 창에 맞춰 조립 (날짜 기준 — 위치 기준 아님)
     stocks = []
     for tk, nm in SECTOR:
-        print(f"   - {nm} ({tk})")
-        sf = stock_flow(tk)
+        if legacy[tk]:
+            print(f"   ⚠ {nm}({tk}): trend 응답에 거래일 필드 없음 — 위치 기반 폴백 사용"
+                  f" (지수와의 정렬 보장 불가)")
+            sf = stock_rows_legacy(tk, pending, bool(pending))
+        else:
+            m = smaps[tk]
+            sf = {
+                "foreign": [m[d]["foreign"] for d in window],
+                "institution": [m[d]["institution"] for d in window],
+                "fhold": [m[d]["fhold"] for d in window],
+            }
         stocks.append({"ticker": tk, "name": nm, **sf})
-        time.sleep(SLEEP)
 
     data = {
-        "as_of": index["KOSPI"]["dates"][-1],
+        "as_of": window[-1],
         "index": index,
         "sector": {"name": SECTOR_NAME, "stocks": stocks},
     }
 
-    _validate(data)  # 계약 위반이면 여기서 중단 — 깨진 출력물을 내보내지 않는다
+    _validate(data, pending)  # 계약 위반이면 여기서 중단 — 깨진 출력물을 내보내지 않는다
 
     # 출력 경로는 collector.py 위치 기준으로 잡아 CWD에 흔들리지 않게 한다.
     here = os.path.dirname(os.path.abspath(__file__))

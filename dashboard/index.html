@@ -795,6 +795,41 @@
         color: #fff;
         font-weight: 700;
       }
+      /* 신선도 경고 — 파이프라인이 멈춰도 화면이 낡은 데이터를 '오늘'처럼 보여주던 문제 */
+      .stale-banner {
+        background: rgba(255, 176, 32, 0.1);
+        border: 1px solid rgba(255, 176, 32, 0.3);
+        border-radius: 10px;
+        padding: 11px 16px;
+        margin-top: 18px;
+        font-size: 12px;
+        color: #ffd591;
+        display: none;
+        gap: 9px;
+        align-items: center;
+      }
+      .stale-banner b {
+        color: #fff;
+        font-weight: 700;
+      }
+      /* OOS 판정 줄 — 신호 등급의 자신감에 대한 균형추 */
+      .edge-strip {
+        display: none;
+        margin-top: 14px;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: 11.5px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .edge-strip b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .edge-strip .warn {
+        color: #ffd591;
+      }
     </style>
   </head>
   <body>
@@ -804,20 +839,6 @@
         <div class="brand">
           <div class="kr">자금 조류</div>
           <div class="en">Money Flow Intelligence</div>
-          <a
-            href="../hr/index.html"
-            style="
-              display: inline-block;
-              margin-top: 9px;
-              font-size: 11px;
-              color: var(--outflow);
-              text-decoration: none;
-              border: 1px solid var(--line-strong);
-              border-radius: 999px;
-              padding: 4px 11px;
-            "
-            >↔ 조직 조류 · People Flow</a
-          >
         </div>
         <div class="meta">
           <div class="item">
@@ -842,6 +863,14 @@
         데이터입니다 · collector.py를 실행해 dashboard/data.js를 생성하면
         실수급으로 전환됩니다.
       </div>
+
+      <!-- 신선도 경고: 파이프라인이 멈춰도 화면은 낡은 data.js를 조용히 렌더했다.
+           무성 실패를 눈에 보이게 만든다. 실데이터일 때만 판단한다. -->
+      <div class="stale-banner" id="staleBanner"></div>
+
+      <!-- OOS 판정: edge_status.json 은 그동안 텔레그램에만 나갔다. 등급 A/B/C 를
+           자신 있게 보여주는 화면에 "그 신호가 실제로 돈이 됐는가"를 함께 둔다. -->
+      <div class="edge-strip" id="edgeStrip"></div>
 
       <!-- HERO -->
       <div class="hero">
@@ -955,6 +984,9 @@
 
     <!-- 리서치 종합·추천 엔진(순수함수 · 브라우저/Node 공유). 수급 신호와 교차. -->
     <script src="research_digest.js"></script>
+
+    <!-- OOS 정산 현황(window.EDGE). settle.js → publish.sh 가 생성. 없으면 줄을 숨긴다. -->
+    <script src="edge.js"></script>
 
     <script>
       /* =========================================================
@@ -1379,6 +1411,62 @@
         if (banner) banner.style.display = "none";
       }
       document.getElementById("asOf").textContent = DATA.as_of;
+
+      /* ---- 신선도 경고 ----
+         파이프라인이 멈춰도 화면은 낡은 data.js를 '오늘의 조류'로 렌더했다(2026-08-07 실제 발생).
+         기준일이 직전 거래일보다 낡으면 몇 세션 밀렸는지 눈에 보이게 한다.
+         거래일 기준이므로 주말·휴장은 세지 않는다 — 금요일 데이터를 월요일에 보는 건 정상이다. */
+      (function renderStaleness() {
+        const el = document.getElementById("staleBanner");
+        if (!el || !USING_REAL || !DATA.as_of) return;
+        const asOf = new Date(DATA.as_of + "T00:00:00+09:00");
+        const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
+        const today = new Date(nowKST.toISOString().slice(0, 10) + "T00:00:00+09:00");
+        // as_of 다음 날부터 오늘까지의 평일 수 = 밀린 거래일 수(근사 — 휴장일은 보수적으로 포함)
+        let lag = 0;
+        for (let d = new Date(asOf); d < today; d.setDate(d.getDate() + 1)) {
+          const w = new Date(d.getTime() + 24 * 3600 * 1000).getUTCDay();
+          if (w !== 0 && w !== 6) lag++;
+        }
+        // 마감 전이면 당일치가 아직 없는 게 정상이므로 하루는 봐준다.
+        const beforeClose = nowKST.getUTCHours() * 60 + nowKST.getUTCMinutes() < 15 * 60 + 40;
+        if (beforeClose) lag -= 1;
+        if (lag < 1) return;
+        el.innerHTML =
+          `<b>데이터 지연</b> 기준일 ${DATA.as_of} · 약 ${lag}거래일 밀렸습니다 · ` +
+          `데일리 수집(평일 16:00 KST)이 실패했거나 아직 돌지 않았습니다 — 화면의 수치는 최신이 아닙니다.`;
+        el.style.display = "flex";
+      })();
+
+      /* ---- OOS 정산 현황 ----
+         등급 A/B/C를 자신 있게 보여주는 화면에 "그 신호가 실제로 돈이 됐는가"를 함께 둔다.
+         표본이 없으면 '엣지 없음'이 아니라 '아직 모른다'로 말한다 — 둘은 다른 진술이다. */
+      (function renderEdge() {
+        const el = document.getElementById("edgeStrip");
+        const E = typeof window.EDGE !== "undefined" && window.EDGE;
+        if (!el || !E) return;
+        const h5 = E.horizons && E.horizons["5"];
+        const parts = [];
+        if (h5 && h5.n > 0) {
+          const m = h5.meanPct === null ? "-" : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
+          parts.push(
+            `<b>엣지 원장(OOS)</b> · 정렬 검증 표본 ${E.live_records}일 · 정산 ${E.settled}건 / 미정산 ${E.pending}건 · ` +
+              `5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`,
+          );
+        } else {
+          parts.push(
+            `<b>엣지 원장(OOS)</b> · 정렬 검증 표본 ${E.live_records || 0}일 — ` +
+              `아직 판정할 표본이 없습니다(‘엣지 없음’이 아니라 ‘미측정’입니다).`,
+          );
+        }
+        if (E.quarantined_records) {
+          parts.push(
+            `<span class="warn">⚠ 2026-08-07 이전 ${E.quarantined_records}일치는 수집 결함(장중 스냅샷 오염 · 종목-지수 정렬 어긋남)으로 격리되어 증거에서 제외됐습니다.</span>`,
+          );
+        }
+        el.innerHTML = parts.join("<br />");
+        el.style.display = "block";
+      })();
       renderHero();
       renderSignalGrid();
       renderSector();
