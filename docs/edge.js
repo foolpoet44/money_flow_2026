@@ -1,14 +1,26 @@
 window.EDGE = {
-  "updated_for": "2026-08-05",
+  "updated_for": "2026-08-07",
   "live_records": 0,
-  "quarantined_records": 30,
+  "quarantined_records": 31,
   "settled": 0,
   "pending": 0,
-  "cohort_note": "2026-08-07 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
+  "cohort_note": "2026-08-07 수집기 수정 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
   "horizons": {
-    "1": { "n": 0, "meanPct": null, "verdict": "표본부족" },
-    "5": { "n": 0, "meanPct": null, "verdict": "표본부족" },
-    "10": { "n": 0, "meanPct": null, "verdict": "표본부족" }
+    "1": {
+      "n": 0,
+      "meanPct": null,
+      "verdict": "표본부족"
+    },
+    "5": {
+      "n": 0,
+      "meanPct": null,
+      "verdict": "표본부족"
+    },
+    "10": {
+      "n": 0,
+      "meanPct": null,
+      "verdict": "표본부족"
+    }
   }
 }
 ;
