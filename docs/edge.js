@@ -1,4 +1,4 @@
-{
+window.EDGE = {
   "updated_for": "2026-08-05",
   "live_records": 0,
   "quarantined_records": 30,
@@ -11,3 +11,4 @@
     "10": { "n": 0, "meanPct": null, "verdict": "표본부족" }
   }
 }
+;

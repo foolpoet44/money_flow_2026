@@ -23,6 +23,13 @@ cp dashboard/signal_engine.js docs/signal_engine.js
 cp dashboard/research_digest.js docs/research_digest.js
 [ -f dashboard/data.js ] && cp dashboard/data.js docs/data.js || true
 [ -f dashboard/research.js ] && cp dashboard/research.js docs/research.js || true
+
+# OOS 정산 현황 → 방식 B(§6)로 화면에 노출. 그동안 edge_status.json 은 텔레그램에만 나갔고
+# 대시보드는 등급 A/B/C 만 자신 있게 보여줬다. "그 신호가 실제로 돈이 됐는가"를 같은 화면에 둔다.
+if [ -f backtest/edge_status.json ]; then
+  { printf 'window.EDGE = '; cat backtest/edge_status.json; printf ';\n'; } > dashboard/edge.js
+  cp dashboard/edge.js docs/edge.js
+fi
 touch docs/.nojekyll   # Jekyll 빌드 비활성(정적 파일 그대로 서빙)
 
 # ── HR 대시보드(조직 조류) 발행 → docs/hr/ ──

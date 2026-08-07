@@ -20,16 +20,41 @@ const S = require(path.join(__dirname, "stats.js"));
 const ledgerPath = path.join(__dirname, "ledger.jsonl");
 
 function appendIfNew(rec) {
-  // 같은 기준일 중복 적재 방지(재실행·시딩 안전)
-  let existing = "";
+  // 같은 기준일 중복 적재 방지(재실행·시딩 안전).
+  //
+  // 왜 '선착순'이 아니라 '확정 우선'인가 (2026-08-07 사고):
+  //   예전 구현은 무조건 선착순이었다. 수집이 개장 뒤로 밀린 날 장중 스냅샷으로 만든 신호가
+  //   먼저 박히면, 익일의 확정치는 "이미 적재됨"으로 기각돼 원장이 영구히 틀린 채로 남았다.
+  //   이제 collector 의 장중 가드가 미확정 세션을 애초에 차단하지만, 방어를 한 겹 더 둔다:
+  //   저장된 레코드가 확정 표식(date_aligned)을 갖고 있지 않다면 확정본으로 덮어쓴다.
+  let lines = [];
   try {
-    existing = fs.readFileSync(ledgerPath, "utf8");
+    lines = fs.readFileSync(ledgerPath, "utf8").split("\n").filter(Boolean);
   } catch {
     /* 첫 실행 */
   }
-  if (existing.includes('"as_of":"' + rec.as_of + '"')) return false;
-  fs.appendFileSync(ledgerPath, JSON.stringify(rec) + "\n");
-  return true;
+  const i = lines.findIndex((l) => {
+    try {
+      return JSON.parse(l).as_of === rec.as_of;
+    } catch {
+      return false;
+    }
+  });
+  if (i < 0) {
+    fs.appendFileSync(ledgerPath, JSON.stringify(rec) + "\n");
+    return "appended";
+  }
+  let prev = {};
+  try {
+    prev = JSON.parse(lines[i]);
+  } catch {
+    /* 손상된 줄은 교체 대상 */
+  }
+  // 이미 정렬 검증된 레코드가 있으면 그대로 둔다(재실행 멱등).
+  if (prev.date_aligned) return false;
+  lines[i] = JSON.stringify(rec);
+  fs.writeFileSync(ledgerPath, lines.join("\n") + "\n");
+  return "upgraded";
 }
 
 // ── --seed: history.json을 시점불변 재생해 과거 신호를 backfill ──
@@ -87,6 +112,9 @@ const signals = E.buildSignals(data);
 const rec = {
   as_of: data.as_of,
   logged_at: new Date().toISOString(),
+  // 2026-08-07 이후 수집기는 종목 시계열을 지수 날짜와 '날짜 기준'으로 맞춘다(위치 기준 아님).
+  // 이 표식이 있는 레코드만 settle.js 가 정본 OOS 표본으로 센다. 이전 구간은 격리된다.
+  date_aligned: true,
   // 종목 신호만 기록(실제 매매 대상). 지수 신호는 컨텍스트라 제외.
   signals: signals
     .filter((s) => s.scope !== "KOSPI" && s.scope !== "KOSDAQ")
@@ -98,10 +126,13 @@ const rec = {
       dir: s.title.includes("매수") ? 1 : s.title.includes("매도") ? -1 : 0,
     })),
 };
-if (appendIfNew(rec)) {
+const result = appendIfNew(rec);
+if (result === "appended") {
+  console.log(`✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`);
+} else if (result === "upgraded") {
   console.log(
-    `✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`,
+    `✓ 엣지 원장 승격: ${data.as_of} · 정렬 미검증 레코드를 확정본으로 교체 (신호 ${rec.signals.length}건)`,
   );
 } else {
-  console.log("· 원장: " + data.as_of + " 이미 적재됨(건너뜀)");
+  console.log("· 원장: " + data.as_of + " 이미 확정 적재됨(건너뜀)");
 }

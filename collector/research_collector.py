@@ -148,17 +148,27 @@ def parse_list(category, label, html):
 
 
 def enrich_detail(report):
-    """상세 페이지에서 리드 요약문단 + 목표가·투자의견을 추출해 report에 채운다."""
+    """상세 페이지에서 리드 요약문단 + 목표가·투자의견을 추출해 report에 채운다.
+
+    반환: 진단용 dict {fetch, summary, target, opinion} — 각 단계 성공 여부(bool).
+    왜 반환하는가 (2026-08-07 조사): 이 함수는 조용히 실패해 왔다. 발행본 히스토리를 보면
+    상세 보강을 시도한 15건 중 요약이 채워진 건 1~4건뿐이고 목표가·투자의견은 0~2건이다.
+    그런데 어디서 실패하는지(호출 실패인지, 패턴 불일치인지) 로그가 남지 않아 알 수 없었다.
+    성공률을 research.json 에 남겨 다음 실행이 스스로 진단하게 한다.
+    """
+    diag = {"fetch": False, "summary": False, "target": False, "opinion": False}
     try:
         html = _get_html(report["url"])
+        diag["fetch"] = True
     except RuntimeError:
-        return  # 상세 실패는 치명적이지 않다 — 제목이 곧 요약 역할
+        return diag  # 상세 실패는 치명적이지 않다 — 제목이 곧 요약 역할
 
     # 목표가 / 투자의견 — 엄격 패턴으로 '확실할 때만' 채운다(거짓 정밀도 금지).
     #   target: '목표(주)가 ... 12,345원'처럼 4자리 이상 + 원 접미사일 때만.
     mt = re.search(r"목표주?가[^\d]{0,8}([1-9][\d,]{3,})\s*원", html)
     if mt:
         report["target"] = mt.group(1).replace(",", "") + "원"
+        diag["target"] = True
     #   opinion: 알려진 투자의견 표현에만 매칭(태그 잔여물 'em' 같은 오염 차단).
     OPINIONS = ("적극매수", "비중확대", "비중축소", "매수", "매도", "중립", "보유",
                 "Strong Buy", "Trading Buy", "Buy", "Hold", "Sell",
@@ -166,14 +176,26 @@ def enrich_detail(report):
     mo = re.search(r"투자의견[^가-힣A-Za-z]{0,8}(" + "|".join(OPINIONS) + r")", html)
     if mo:
         report["opinion"] = mo.group(1)
+        diag["opinion"] = True
 
     # 리드 요약: 본문 td 중 가장 긴 텍스트 블록(리포트 첫 문단)
-    texts = [_strip(t) for t in re.findall(r"<td[^>]*>(.*?)</td>", html, re.S)]
-    texts = [t for t in texts if len(t) > 40 and "pdf" not in t.lower()]
+    #
+    # 폴백을 왜 '2단계'로 두는가: td 후보가 하나라도 있으면 그 안에서 고른다. td 가 아예
+    # 없을 때만(= 네이버가 표 기반 레이아웃을 버린 경우) div/p 로 내려간다. 후보 풀을 처음부터
+    # 넓히면 네비게이션·면책조항 같은 더 긴 블록이 본문을 이겨 요약 품질이 오히려 나빠진다.
+    # 즉 이 폴백은 '기존에 성공하던 케이스'의 결과를 바꾸지 않는다 — 실패하던 케이스만 건진다.
+    def _candidates(tag):
+        found = [_strip(t) for t in re.findall(rf"<{tag}[^>]*>(.*?)</{tag}>", html, re.S)]
+        return [t for t in found if len(t) > 40 and "pdf" not in t.lower()]
+
+    texts = _candidates("td") or _candidates("p") or _candidates("div")
     if texts:
         lead = max(texts, key=len)
         lead = re.sub(r"\d{8,}_?\w*\.pdf", "", lead).strip()  # 끝에 붙는 파일명 제거
         report["summary"] = lead[:280]
+        diag["summary"] = True
+
+    return diag
 
 
 # ── 엔트리포인트 ─────────────────────────────────────
@@ -199,16 +221,21 @@ def main():
     # 상세 요약 보강: 이미 중요도순(섹터→시황→조회수)으로 정렬돼 있으므로
     # 상위 MAX_SUMMARIES건을 무조건 보강한다. 추천 대상이 본문 요약을 갖도록.
     print("· 핵심 리포트 상세 요약 추출 중…")
-    enriched = 0
+    tally = {"attempted": 0, "fetch": 0, "summary": 0, "target": 0, "opinion": 0}
     for r in reports[:MAX_SUMMARIES]:
-        enrich_detail(r)
-        enriched += 1
+        d = enrich_detail(r)
+        tally["attempted"] += 1
+        for k in ("fetch", "summary", "target", "opinion"):
+            tally[k] += 1 if d[k] else 0
         time.sleep(SLEEP)
 
     data = {
         "as_of": as_of,
         "count": len(reports),
         "sector_count": sum(1 for r in reports if r["sector"]),
+        # 추출 성공률을 계약에 남긴다. §11.1 의 '추출형 요약'이 실제로 작동하는지
+        # 매일 스스로 드러나게 하는 계측치다 — 조용한 열화를 막는다.
+        "enrich": tally,
         "reports": reports,
     }
 
@@ -220,7 +247,12 @@ def main():
     with open(os.path.join(root, "dashboard", "research.js"), "w", encoding="utf-8") as fp:
         fp.write("window.RESEARCH = " + payload + ";\n")
     print(f"✓ research.json + dashboard/research.js · {as_of} · "
-          f"리포트 {data['count']}건(섹터연관 {data['sector_count']}건) · 요약보강 {enriched}건")
+          f"리포트 {data['count']}건(섹터연관 {data['sector_count']}건)")
+    print(f"  상세보강 시도 {tally['attempted']}건 → 호출성공 {tally['fetch']} · "
+          f"요약 {tally['summary']} · 목표가 {tally['target']} · 투자의견 {tally['opinion']}")
+    if tally["attempted"] and tally["summary"] / tally["attempted"] < 0.5:
+        print("  ⚠ 요약 추출 성공률이 50% 미만입니다 — 네이버 상세 페이지 구조 변경 의심 "
+              "(enrich_detail 의 리드 추출 패턴 점검 필요)")
 
 
 if __name__ == "__main__":

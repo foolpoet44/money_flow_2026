@@ -393,6 +393,10 @@
         경영진의 <b>지원적 주의</b>를 위한 약신호입니다.
       </div>
 
+      <!-- 정적 스냅샷 고지: 이 화면은 데일리 파이프라인에 연결돼 있지 않다(hr_synth.py 수동 실행).
+           머니플로 화면과 나란히 놓이면 매일 갱신되는 것처럼 오인되므로 명시한다. -->
+      <div class="ethics" id="staticNote" style="display: none"></div>
+
       <div class="hero">
         <div class="card">
           <div class="tide-t">조직 이탈압력 조류 · 12주</div>
@@ -460,6 +464,24 @@
       // ── 조직 tide ──
       const org = HR.org;
       document.getElementById("asOf").textContent = HR.as_of;
+
+      // 정적 스냅샷 고지 — 기준 주차가 현재 주차에서 얼마나 떨어져 있는지 그대로 보여준다.
+      (function staticNote() {
+        const el = document.getElementById("staticNote");
+        const m = /^(\d{4})-W(\d{1,2})$/.exec(HR.as_of || "");
+        if (!el || !m) return;
+        const now = new Date(Date.now() + 9 * 3600 * 1000); // KST
+        // ISO 주차 계산(목요일 기준)
+        const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+        const week = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+        const age = (t.getUTCFullYear() - +m[1]) * 52 + (week - +m[2]);
+        el.innerHTML =
+          `<b>정적 스냅샷</b> · 기준 ${HR.as_of}` +
+          (age > 0 ? ` · 현재 ${t.getUTCFullYear()}-W${week} 기준 <b>${age}주 경과</b>` : "") +
+          ` · 이 화면은 데일리 파이프라인에 연결돼 있지 않습니다(hr/hr_synth.py 수동 실행 시 갱신).`;
+        el.style.display = "block";
+      })();
       const p = org.attrition_pressure;
       const delta = p[p.length - 1] - p[0];
       document.getElementById("tideNet").textContent = fmt1(delta);
@@ -470,25 +492,28 @@
       document.getElementById("tideSpark").innerHTML = spark(p, true);
 
       // ── 헤로 신호 ──
-      const top = SIGNALS[0];
+      // 변수명 주의: 최상위 스코프의 `top` 은 브라우저 내장 window.top 과 충돌해
+      // "Identifier 'top' has already been declared" SyntaxError 로 스크립트 전체가 죽는다.
+      // (2026-08-07 발견 — 이 페이지의 모든 값이 '—' 로만 렌더되고 있었다.)
+      const topSig = SIGNALS[0];
       const gradeMap = {
         critical: ["A", "3개 약신호 정렬 — 즉시 지원 검토"],
         alert: ["B", "약신호 정렬 — 주의 관찰"],
         watch: ["C", "단일 약신호 — 관찰 단계"],
       };
-      const [grade, gtext] = gradeMap[top.tier];
+      const [grade, gtext] = gradeMap[topSig.tier];
       const tierKr = { critical: "CRITICAL", alert: "ALERT", watch: "WATCH" }[
-        top.tier
+        topSig.tier
       ];
       document.getElementById("signalHero").innerHTML = `
         <div>
-          <span class="tier-tag ${top.tier}">● ${tierKr}</span>
-          <h3>${top.scope} · ${top.drivers.join(" · ")}</h3>
-          <p>자기 기준선 대비 z=${top.z.toFixed(1)}의 약신호가 <b style="color:var(--bone)">${top.conf}개</b> 방향 정렬됐습니다. ${top.level === "org" ? "조직 전반" : "팀"} 차원의 주의가 필요합니다.</p>
+          <span class="tier-tag ${topSig.tier}">● ${tierKr}</span>
+          <h3>${topSig.scope} · ${topSig.drivers.join(" · ")}</h3>
+          <p>자기 기준선 대비 z=${topSig.z.toFixed(1)}의 약신호가 <b style="color:var(--bone)">${topSig.conf}개</b> 방향 정렬됐습니다. ${topSig.level === "org" ? "조직 전반" : "팀"} 차원의 주의가 필요합니다.</p>
         </div>
         <div class="conf">
-          <span class="grade mono" style="color:${top.tier === "critical" ? "var(--critical)" : "var(--alert)"}">${grade}</span>
-          <span class="gm">신뢰등급 <b>${grade}</b> · 정합 약신호 <b>${top.conf}개</b><br>${gtext}</span>
+          <span class="grade mono" style="color:${topSig.tier === "critical" ? "var(--critical)" : "var(--alert)"}">${grade}</span>
+          <span class="gm">신뢰등급 <b>${grade}</b> · 정합 약신호 <b>${topSig.conf}개</b><br>${gtext}</span>
         </div>`;
 
       // ── 팀 그리드 ──

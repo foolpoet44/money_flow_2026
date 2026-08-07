@@ -54,7 +54,7 @@ node dashboard/signal_engine.test.js     # (선택) 신호 엔진 단위 테스�
 
 ### 자동화 (데일리 무인 실행)
 
-`scripts/run_daily.sh`가 수집→신호 테스트 게이트→다이제스트→텔레그램(Alert 이상)까지 1회로 묶는다. macOS launchd로 평일 08:00(KST) 자동 실행한다.
+`scripts/run_daily.sh`가 수집→신호 테스트 게이트→다이제스트→텔레그램(Alert 이상)까지 1회로 묶는다. GitHub Actions cron으로 **평일 16:00(KST) 자동 실행**한다 — 정규장 마감(15:30) 이후라야 당일 세션이 확정된다. (로컬 macOS launchd 진입점도 같은 시각으로 맞춰 뒀다.)
 
 ```bash
 scripts/run_daily.sh                  # 수동 1회 실행(드라이런/전송 모두)
@@ -86,4 +86,4 @@ node   backtest/settle.js          # 원장 신호에 실현수익 결합·재�
 - [x] **Sprint 1** — 실데이터 수집 (네이버 JSON API 전환, 재시도·검증, `data.json` 실생성)
 - [x] **Sprint 2** — 신호 엔진 분리 & 단위 테스트 (`signal_engine.js`, `node dashboard/signal_engine.test.js`)
 - [x] **Sprint 3** — 대시보드 데이터 구동 (`window.DATA` 우선 + 합성 fallback, 실데이터시 배너 숨김)
-- [x] **Sprint 4** — 자동화 & 텔레그램 알림 (launchd 평일 08:00 KST, Alert↑ 다이제스트 푸시)
+- [x] **Sprint 4** — 자동화 & 텔레그램 알림 (GitHub Actions 평일 16:00 KST, Alert↑ 다이제스트 푸시)

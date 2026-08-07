@@ -159,14 +159,21 @@ async function main() {
     }
   }
 
-  const store = { seeded: emptyBuckets(), live: emptyBuckets() };
+  // 코호트 3분할 (2026-08-07 감사 결과):
+  //   live   — 수집기 수정 이후. 종목 시계열이 지수 날짜와 '날짜 기준'으로 정렬됨. 정본.
+  //   legacy — 수정 이전. 장중 스냅샷 오염 + 종목-지수 ±1 세션 어긋남이 섞여 있어 격리.
+  //            (audit_ledger.js 참조 — 오프셋이 상수가 아니라 복원 불가로 판정)
+  //   seeded — history 재생. in-sample 참고용.
+  // 격리분을 정본에 섞으면 훼손된 표본이 깨끗한 증거로 둔갑한다. 절대 합치지 않는다.
+  const store = { seeded: emptyBuckets(), live: emptyBuckets(), legacy: emptyBuckets() };
   const counts = {
     seeded: { settled: 0, pending: 0, expired: 0 },
     live: { settled: 0, pending: 0, expired: 0 },
+    legacy: { settled: 0, pending: 0, expired: 0 },
   };
 
   for (const rec of records) {
-    const mode = rec.seeded ? "seeded" : "live";
+    const mode = rec.seeded ? "seeded" : rec.date_aligned ? "live" : "legacy";
     const a = ymd(rec.as_of);
     for (const sig of rec.signals) {
       const P = prices[sig.scope];
@@ -201,10 +208,16 @@ async function main() {
   );
 
   report(
-    "LIVE (실제 적재 · OUT-OF-SAMPLE 정본)",
+    "LIVE (날짜정렬 검증 · OUT-OF-SAMPLE 정본)",
     store.live,
     baseline,
     counts.live,
+  );
+  report(
+    "LEGACY (2026-08-07 이전 · 격리 — 증거로 쓰지 말 것)",
+    store.legacy,
+    baseline,
+    counts.legacy,
   );
   report(
     "SEEDED (history 시딩 · in-sample 참고/검증용)",
@@ -216,6 +229,12 @@ async function main() {
   console.log("\n── 메모 ──");
   console.log(
     "· LIVE가 정본이다. 기록 시점에 미래를 몰랐으므로 과최적화가 불가능하다.",
+  );
+  console.log(
+    "· LEGACY는 장중 스냅샷 오염(15/30건)과 종목-지수 ±1 세션 어긋남이 섞인 구간이다.",
+  );
+  console.log(
+    "  복원 불가로 판정해 격리했다(backtest/audit_ledger.js). 판정 근거로 인용하지 않는다.",
   );
   console.log(
     "· SEEDED는 backtest.js와 같은 데이터라 결과가 비슷해야 정상(정산 로직 검증).",
@@ -232,9 +251,13 @@ async function main() {
           .sort()
           .slice(-1)[0]
       : null,
-    live_records: records.filter((r) => !r.seeded).length,
+    live_records: records.filter((r) => !r.seeded && r.date_aligned).length,
+    quarantined_records: records.filter((r) => !r.seeded && !r.date_aligned).length,
     settled: counts.live.settled,
     pending: counts.live.pending,
+    // 대시보드·다이제스트가 "표본 없음"과 "엣지 없음"을 혼동하지 않도록 상태를 명시한다.
+    cohort_note:
+      "2026-08-07 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
     horizons: {},
   };
   HORIZONS.forEach((h) => {
