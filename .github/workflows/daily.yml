@@ -52,10 +52,13 @@ jobs:
   daily:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (main)
+      # 정기 실행(schedule)에서 github.ref_name 은 기본 브랜치(main)라 동작은 그대로다.
+      # 수동 실행(workflow_dispatch)에서는 고른 브랜치를 그대로 체크아웃하므로, 파이프라인
+      # 변경을 main 에 합치기 '전에' 실제로 한 사이클 돌려 검증할 수 있다.
+      - name: Checkout (dispatched ref, 기본 main)
         uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Setup Python
