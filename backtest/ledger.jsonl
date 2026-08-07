@@ -29,3 +29,4 @@
 {"as_of": "2026-08-04", "logged_at": "2026-08-04T00:11:11.334Z", "signals": [], "date_aligned": false}
 {"as_of": "2026-08-05", "logged_at": "2026-08-06T00:01:05.020Z", "signals": [], "date_aligned": false}
 {"as_of": "2026-08-07", "logged_at": "2026-08-07T01:42:36.008Z", "signals": [{"scope": "삼성전기", "tier": "critical", "z": 3.53, "conf": 1, "dir": -1}], "date_aligned": false}
+{"as_of":"2026-08-06","logged_at":"2026-08-07T08:12:10.870Z","date_aligned":true,"signals":[{"scope":"삼성전기","tier":"critical","z":3.53,"conf":1,"dir":-1}]}
