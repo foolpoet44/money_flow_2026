@@ -28,3 +28,4 @@
 {"as_of":"2026-07-31","logged_at":"2026-08-03T00:00:15.063Z","signals":[{"scope":"SK하이닉스","tier":"critical","z":3.61,"conf":2,"dir":1},{"scope":"삼성전자","tier":"critical","z":3.08,"conf":2,"dir":1},{"scope":"SK스퀘어","tier":"alert","z":1.6,"conf":1,"dir":1},{"scope":"삼성전기","tier":"alert","z":1.31,"conf":2,"dir":1}]}
 {"as_of":"2026-08-04","logged_at":"2026-08-04T00:11:11.334Z","signals":[]}
 {"as_of":"2026-08-05","logged_at":"2026-08-06T00:01:05.020Z","signals":[]}
+{"as_of":"2026-08-07","logged_at":"2026-08-07T01:42:36.008Z","signals":[{"scope":"삼성전기","tier":"critical","z":3.53,"conf":1,"dir":-1}]}
