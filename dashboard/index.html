@@ -846,13 +846,13 @@
             <span class="val mono" id="asOf">—</span>
           </div>
           <div class="item">
-            <span class="lbl">갱신 주기</span>
-            <span class="val">일 1회 · 장 마감 후</span>
+            <span class="lbl">최종 수집</span>
+            <span class="val mono" id="collectedAt">—</span>
           </div>
           <div class="item">
             <span class="pill"
               ><span class="dot"></span
-              ><span id="mktStatus">장 마감</span></span
+              ><span id="mktStatus">—</span></span
             >
           </div>
         </div>
@@ -1416,25 +1416,80 @@
          파이프라인이 멈춰도 화면은 낡은 data.js를 '오늘의 조류'로 렌더했다(2026-08-07 실제 발생).
          기준일이 직전 거래일보다 낡으면 몇 세션 밀렸는지 눈에 보이게 한다.
          거래일 기준이므로 주말·휴장은 세지 않는다 — 금요일 데이터를 월요일에 보는 건 정상이다. */
+      // KST 기준 '지금'. 브라우저 로컬 타임존과 무관하게 한국 시각으로 판단한다.
+      const NOW_KST = new Date(Date.now() + 9 * 3600 * 1000);
+      const RUN_HOUR_KST = 20; // 데일리 cron (평일 20:00 KST)
+      const RUN_GRACE_H = 3; // 스케줄러 지터 허용(실측 최대 163분)
+
+      /* ---- 장 상태 pill ----
+         예전엔 "장 마감" 이 하드코딩돼 있어 장중에 열어도 '장 마감'으로 표시됐다.
+         공휴일 달력은 없으므로 주말·시간대만 판단하고, 그 한계를 문구로 넘기지 않는다. */
+      (function renderMarketStatus() {
+        const el = document.getElementById("mktStatus");
+        if (!el) return;
+        const dow = NOW_KST.getUTCDay();
+        const min = NOW_KST.getUTCHours() * 60 + NOW_KST.getUTCMinutes();
+        let txt;
+        if (dow === 0 || dow === 6) txt = "휴장";
+        else if (min < 9 * 60) txt = "장 시작 전";
+        else if (min < 15 * 60 + 30) txt = "장중";
+        else txt = "장 마감";
+        el.textContent = txt;
+      })();
+
+      /* ---- 신선도 판정 ----
+         왜 as_of 가 아니라 collected_at 인가 (2026-08-07 사고):
+           예전 배너는 as_of 와 오늘 날짜만 비교하고는 "수집이 실패했거나 아직 돌지 않았습니다"라고
+           원인까지 단정했다. 그러나 as_of 가 전 거래일인 것은 정상일 수 있다 — 종목 수급 피드가
+           당일치를 늦게 게시하면 common_window() 가 창을 물리기 때문이다(계약 §4). 실제로 수집이
+           성공한 직후에도 "실패했다"고 표시됐다. 관측(기준일이 어제)과 해석(수집 실패)을 섞은 것이다.
+           → 이제 '마지막으로 수집이 돌았어야 할 시각'과 collected_at 을 비교해 판정한다.
+             collected_at 이 없는 구버전 data.js 에서는 원인을 단정하지 않고 관측만 진술한다. */
       (function renderStaleness() {
         const el = document.getElementById("staleBanner");
         if (!el || !USING_REAL || !DATA.as_of) return;
-        const asOf = new Date(DATA.as_of + "T00:00:00+09:00");
-        const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
-        const today = new Date(nowKST.toISOString().slice(0, 10) + "T00:00:00+09:00");
-        // as_of 다음 날부터 오늘까지의 평일 수 = 밀린 거래일 수(근사 — 휴장일은 보수적으로 포함)
-        let lag = 0;
-        for (let d = new Date(asOf); d < today; d.setDate(d.getDate() + 1)) {
-          const w = new Date(d.getTime() + 24 * 3600 * 1000).getUTCDay();
-          if (w !== 0 && w !== 6) lag++;
+
+        // 최종 수집 시각 표시 (헤더)
+        const cAt = DATA.collected_at ? new Date(DATA.collected_at) : null;
+        const cEl = document.getElementById("collectedAt");
+        if (cEl)
+          cEl.textContent = cAt
+            ? new Date(cAt.getTime() + 9 * 3600 * 1000)
+                .toISOString()
+                .slice(5, 16)
+                .replace("T", " ")
+            : "—";
+
+        if (!cAt) {
+          // 구버전 데이터 — 원인을 추측하지 않고 사실만 말한다.
+          el.innerHTML =
+            `<b>수집 시각 미상</b> 기준일 ${DATA.as_of} · 이 데이터에는 수집 시각(collected_at)이 없어 ` +
+            `최신 여부를 판정할 수 없습니다.`;
+          el.style.display = "flex";
+          return;
         }
-        // 마감 전이면 당일치가 아직 없는 게 정상이므로 하루는 봐준다.
-        const beforeClose = nowKST.getUTCHours() * 60 + nowKST.getUTCMinutes() < 15 * 60 + 40;
-        if (beforeClose) lag -= 1;
-        if (lag < 1) return;
+
+        // 지금 시점에서 '이미 돌았어야 하는' 가장 최근 예정 실행 시각.
+        // 지터 유예(3h)가 지난 슬롯만 기대 대상으로 삼는다 — 지연 중에 오경보를 내지 않기 위함.
+        const due = new Date(NOW_KST.getTime() - RUN_GRACE_H * 3600 * 1000);
+        const expected = new Date(
+          Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate(), RUN_HOUR_KST, 0, 0),
+        );
+        if (expected > due) expected.setUTCDate(expected.getUTCDate() - 1);
+        while (expected.getUTCDay() === 0 || expected.getUTCDay() === 6)
+          expected.setUTCDate(expected.getUTCDate() - 1);
+
+        const collectedKST = new Date(cAt.getTime() + 9 * 3600 * 1000);
+        if (collectedKST >= expected) return; // 예정대로 돌았다 — 배너 없음
+
+        const missed = Math.max(
+          1,
+          Math.round((expected - collectedKST) / (24 * 3600 * 1000)),
+        );
+        const fmt = (d) => d.toISOString().slice(5, 16).replace("T", " ");
         el.innerHTML =
-          `<b>데이터 지연</b> 기준일 ${DATA.as_of} · 약 ${lag}거래일 밀렸습니다 · ` +
-          `데일리 수집(평일 16:00 KST)이 실패했거나 아직 돌지 않았습니다 — 화면의 수치는 최신이 아닙니다.`;
+          `<b>데일리 수집 미실행</b> 마지막 수집 ${fmt(collectedKST)} KST · 기준일 ${DATA.as_of} · ` +
+          `예정(평일 ${RUN_HOUR_KST}:00 KST) 대비 약 ${missed}회 누락 — 화면의 수치는 최신이 아닙니다.`;
         el.style.display = "flex";
       })();
 
@@ -1447,21 +1502,29 @@
         if (!el || !E) return;
         const h5 = E.horizons && E.horizons["5"];
         const parts = [];
+        // 서로 다른 수를 한 문장에 섞지 않는다. 예전 문구는 "표본 1일 — 표본이 없습니다"처럼
+        // 원장 레코드 수와 정산 거래 수를 뒤섞어 자기모순으로 읽혔다(2026-08-07).
+        //   live_records = 정렬 검증된 거래일 수 (원장에 쌓인 날)
+        //   settled      = 청산까지 끝나 수익이 확정된 신호×기간 건수 (판정의 실제 표본)
+        //   pending      = 신호는 났으나 청산일 미도래
+        const head = `<b>엣지 원장(OOS)</b> · 정렬 검증 ${E.live_records || 0}거래일 · 정산 ${E.settled || 0}건 / 미정산 ${E.pending || 0}건`;
         if (h5 && h5.n > 0) {
           const m = h5.meanPct === null ? "-" : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
-          parts.push(
-            `<b>엣지 원장(OOS)</b> · 정렬 검증 표본 ${E.live_records}일 · 정산 ${E.settled}건 / 미정산 ${E.pending}건 · ` +
-              `5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`,
-          );
+          parts.push(`${head} · 5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`);
+        } else if (E.settled) {
+          parts.push(`${head} · 5일 보유 표본이 아직 최소 기준에 못 미칩니다 → <b>판정 보류</b>`);
         } else {
           parts.push(
-            `<b>엣지 원장(OOS)</b> · 정렬 검증 표본 ${E.live_records || 0}일 — ` +
-              `아직 판정할 표본이 없습니다(‘엣지 없음’이 아니라 ‘미측정’입니다).`,
+            `${head} — <b>아직 판정 불가</b>: 청산이 끝난 신호가 없습니다` +
+              `(‘엣지 없음’이 아니라 ‘미측정’입니다).`,
           );
         }
         if (E.quarantined_records) {
+          // 격리 기준일은 데이터에서 온다. 예전엔 '2026-08-07'이 HTML에 박혀 있었고,
+          // 게다가 그 날짜 레코드 자신이 격리 대상이라 "이전"이라는 표현이 사실과 어긋났다.
+          const through = E.quarantine_through ? `${E.quarantine_through}까지` : "수집기 수정 이전";
           parts.push(
-            `<span class="warn">⚠ 2026-08-07 이전 ${E.quarantined_records}일치는 수집 결함(장중 스냅샷 오염 · 종목-지수 정렬 어긋남)으로 격리되어 증거에서 제외됐습니다.</span>`,
+            `<span class="warn">⚠ ${through} ${E.quarantined_records}일치는 수집 결함(장중 스냅샷 오염 · 종목-지수 정렬 어긋남)으로 격리되어 증거에서 제외됐습니다.</span>`,
           );
         }
         el.innerHTML = parts.join("<br />");

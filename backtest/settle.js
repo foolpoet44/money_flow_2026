@@ -253,6 +253,15 @@ async function main() {
       : null,
     live_records: records.filter((r) => !r.seeded && r.date_aligned).length,
     quarantined_records: records.filter((r) => !r.seeded && !r.date_aligned).length,
+    // 격리 구간의 마지막 기준일. 소비자(대시보드·다이제스트)가 문구를 데이터에서 만들도록 노출한다.
+    // 예전엔 '2026-08-07'이 HTML·digest 양쪽에 문자열로 박혀 있었고, 그 날짜 레코드 자신이
+    // 격리 대상이라 "…이전"이라는 표현이 사실과 어긋났다.
+    quarantine_through:
+      records
+        .filter((r) => !r.seeded && !r.date_aligned)
+        .map((r) => r.as_of)
+        .sort()
+        .slice(-1)[0] || null,
     settled: counts.live.settled,
     pending: counts.live.pending,
     // 대시보드·다이제스트가 "표본 없음"과 "엣지 없음"을 혼동하지 않도록 상태를 명시한다.

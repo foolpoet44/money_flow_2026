@@ -256,6 +256,9 @@ def _validate(data, pending=None):
     # 미확정 세션이 계약에 새어 들어왔는가 — 장중 스냅샷 재발 방지의 최종 관문.
     if pending and data["as_of"] == pending:
         errs.append(f"as_of={data['as_of']}는 아직 마감 미확정 세션 — 장중 데이터 유출")
+    # 신선도 판정의 근거이므로 비어 있으면 안 된다(계약 §4).
+    if not data.get("collected_at"):
+        errs.append("collected_at 누락 — 대시보드가 신선도를 판정할 수 없다")
     for mkt in MARKETS:
         d = data["index"][mkt]
         for key in ("dates", "foreign", "institution", "close"):
@@ -341,6 +344,9 @@ def main():
 
     data = {
         "as_of": window[-1],
+        # 수집이 실제로 돈 시각(계약 §4). as_of 만으로는 '기준일이 어제'가 정상(피드 게시 지연)인지
+        # 비정상(파이프라인 중단)인지 구분할 수 없어, 대시보드가 원인을 추측해 단정하는 사고가 있었다.
+        "collected_at": datetime.datetime.now(KST).isoformat(timespec="seconds"),
         "index": index,
         "sector": {"name": SECTOR_NAME, "stocks": stocks},
     }
