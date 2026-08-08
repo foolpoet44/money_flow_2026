@@ -40,20 +40,31 @@ function appendIfNew(rec) {
       return false;
     }
   });
+  // as_of 오름차순을 유지한다. 예전엔 무조건 append 라 적재순으로 쌓였고, 승격·backfill 이
+  // 섞이면 …08-05, 08-07, 08-06 처럼 순서가 깨졌다. 집계는 as_of 로 조회하므로 결과는
+  // 정확했지만 "마지막 줄 = 최신"을 가정하는 코드가 생기면 조용히 틀린다.
+  const writeSorted = (rows) => {
+    rows.sort((a, b) => (a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : 0));
+    fs.writeFileSync(ledgerPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  };
+  const parsed = lines.map((l) => {
+    try {
+      return JSON.parse(l);
+    } catch {
+      return null;
+    }
+  });
+
   if (i < 0) {
-    fs.appendFileSync(ledgerPath, JSON.stringify(rec) + "\n");
+    parsed.push(rec);
+    writeSorted(parsed.filter(Boolean));
     return "appended";
   }
-  let prev = {};
-  try {
-    prev = JSON.parse(lines[i]);
-  } catch {
-    /* 손상된 줄은 교체 대상 */
-  }
+  const prev = parsed[i] || {};
   // 이미 정렬 검증된 레코드가 있으면 그대로 둔다(재실행 멱등).
   if (prev.date_aligned) return false;
-  lines[i] = JSON.stringify(rec);
-  fs.writeFileSync(ledgerPath, lines.join("\n") + "\n");
+  parsed[i] = rec;
+  writeSorted(parsed.filter(Boolean));
   return "upgraded";
 }
 

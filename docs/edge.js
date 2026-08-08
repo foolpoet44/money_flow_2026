@@ -2,6 +2,7 @@ window.EDGE = {
   "updated_for": "2026-08-07",
   "live_records": 1,
   "quarantined_records": 31,
+  "quarantine_through": "2026-08-07",
   "settled": 0,
   "pending": 3,
   "cohort_note": "2026-08-07 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
@@ -22,4 +23,5 @@ window.EDGE = {
       "verdict": "표본부족"
     }
   }
-};
+}
+;

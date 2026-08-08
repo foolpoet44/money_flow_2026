@@ -94,19 +94,25 @@ try {
   const h5 = es.horizons && es.horizons["5"];
   L.push("");
   L.push(
-    `■ 엣지 원장(OOS) · 라이브 정산 ${es.settled}건 / 미정산 ${es.pending}`,
+    `■ 엣지 원장(OOS) · 정렬 검증 ${es.live_records || 0}거래일 · 정산 ${es.settled}건 / 미정산 ${es.pending}`,
   );
-  if (h5) {
+  if (h5 && h5.n > 0) {
     const m =
       h5.meanPct === null
         ? "-"
         : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
     L.push(`  5일 보유: N=${h5.n} · 평균 ${m} · 판정 ${h5.verdict}`);
+  } else {
+    // "표본 없음"과 "엣지 없음"은 다른 말이다. 청산 전이면 그렇게 말한다.
+    L.push("  5일 보유: 청산 끝난 신호 없음 — 판정 불가(미측정)");
   }
-  // 격리 구간이 있으면 반드시 함께 알린다 — "표본 없음"과 "엣지 없음"은 다른 말이다.
+  // 격리 구간이 있으면 반드시 함께 알린다. 기준일은 데이터에서 온다(하드코딩 금지).
   if (es.quarantined_records) {
+    const through = es.quarantine_through
+      ? `${es.quarantine_through}까지`
+      : "수집기 수정 이전";
     L.push(
-      `  ⚠ 2026-08-07 이전 ${es.quarantined_records}일치는 수집 결함으로 격리(증거 제외)`,
+      `  ⚠ ${through} ${es.quarantined_records}일치는 수집 결함으로 격리(증거 제외)`,
     );
   }
 } catch {

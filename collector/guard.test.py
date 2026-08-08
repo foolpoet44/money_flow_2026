@@ -100,6 +100,7 @@ except RuntimeError:
 print("· 계약 검증이 미확정 as_of 를 차단하는가 (최종 관문)")
 skeleton = {
     "as_of": "2026-08-07",
+    "collected_at": "2026-08-07T20:04:11+09:00",
     "index": {m: {"dates": [], "foreign": [], "institution": [], "close": []} for m in C.MARKETS},
     "sector": {"stocks": []},
 }
@@ -110,6 +111,16 @@ try:
 except AssertionError as e:
     leaked = [ln for ln in str(e).splitlines() if "미확정" in ln]
     check("미확정 as_of 차단", bool(leaked), True)
+
+print("· 계약이 collected_at 을 요구하는가 (신선도 판정의 근거 · §4)")
+no_ts = dict(skeleton, as_of="2026-08-06")
+no_ts.pop("collected_at")
+try:
+    C._validate(no_ts, None)
+    fails.append("_validate 가 collected_at 누락을 통과시켰다")
+    print("  ✗ collected_at 이 없는데 통과시켰다")
+except AssertionError as e:
+    check("collected_at 누락 차단", any("collected_at" in ln for ln in str(e).splitlines()), True)
 
 print()
 if fails:
