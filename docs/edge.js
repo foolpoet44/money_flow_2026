@@ -1,6 +1,6 @@
 window.EDGE = {
-  "updated_for": "2026-08-12",
-  "live_records": 4,
+  "updated_for": "2026-08-13",
+  "live_records": 5,
   "quarantined_records": 31,
   "quarantine_through": "2026-08-07",
   "settled": 1,
