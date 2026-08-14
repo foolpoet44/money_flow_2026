@@ -1,20 +1,20 @@
 window.EDGE = {
-  "updated_for": "2026-08-13",
-  "live_records": 5,
+  "updated_for": "2026-08-14",
+  "live_records": 6,
   "quarantined_records": 31,
   "quarantine_through": "2026-08-07",
-  "settled": 1,
-  "pending": 8,
+  "settled": 4,
+  "pending": 11,
   "cohort_note": "2026-08-07 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
   "horizons": {
     "1": {
-      "n": 1,
-      "meanPct": 0.11,
+      "n": 3,
+      "meanPct": 1.93,
       "verdict": "표본부족"
     },
     "5": {
-      "n": 0,
-      "meanPct": null,
+      "n": 1,
+      "meanPct": -22.11,
       "verdict": "표본부족"
     },
     "10": {
