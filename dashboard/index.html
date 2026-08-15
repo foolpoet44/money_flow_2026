@@ -851,8 +851,7 @@
           </div>
           <div class="item">
             <span class="pill"
-              ><span class="dot"></span
-              ><span id="mktStatus">—</span></span
+              ><span class="dot"></span><span id="mktStatus">—</span></span
             >
           </div>
         </div>
@@ -1422,15 +1421,33 @@
       const RUN_GRACE_H = 3; // 스케줄러 지터 허용(실측 최대 163분)
 
       /* ---- 장 상태 pill ----
-         예전엔 "장 마감" 이 하드코딩돼 있어 장중에 열어도 '장 마감'으로 표시됐다.
-         공휴일 달력은 없으므로 주말·시간대만 판단하고, 그 한계를 문구로 넘기지 않는다. */
+         예전엔 "장 마감" 이 하드코딩돼 있어 장중에 열어도 '장 마감'으로 표시됐다. 그 뒤에도
+         주말만 알아서 공휴일에는 '장중'이라고 잘못 말했다.
+
+         이제 계약의 sessions(확정 거래일 달력)를 본다. 지수 차트가 곧 거래일 목록이므로
+         공휴일 달력 라이브러리 없이 얻는다. 다만 달력은 '수집된 시점까지'만 안다 —
+         그 너머(오늘이 아직 수집 전인 미래)는 모른다고 인정하고 시간대 판단으로 돌아간다.
+         모르는 것을 아는 척하지 않는다(§1.5). */
       (function renderMarketStatus() {
         const el = document.getElementById("mktStatus");
         if (!el) return;
         const dow = NOW_KST.getUTCDay();
         const min = NOW_KST.getUTCHours() * 60 + NOW_KST.getUTCMinutes();
+        const today = NOW_KST.toISOString().slice(0, 10);
+        const sessions = Array.isArray(DATA.sessions) ? DATA.sessions : [];
+        // 달력이 오늘까지 닿는가: 마지막 확정 거래일이 오늘 이후이거나, 오늘 수집이 끝났거나.
+        const collectedDate = DATA.collected_at
+          ? new Date(new Date(DATA.collected_at).getTime() + 9 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10)
+          : "";
+        const calendarKnowsToday =
+          sessions.length &&
+          (sessions[sessions.length - 1] >= today || collectedDate >= today);
+
         let txt;
-        if (dow === 0 || dow === 6) txt = "휴장";
+        if (dow === 0 || dow === 6) txt = "휴장 (주말)";
+        else if (calendarKnowsToday && !sessions.includes(today)) txt = "휴장";
         else if (min < 9 * 60) txt = "장 시작 전";
         else if (min < 15 * 60 + 30) txt = "장중";
         else txt = "장 마감";
@@ -1473,7 +1490,14 @@
         // 지터 유예(3h)가 지난 슬롯만 기대 대상으로 삼는다 — 지연 중에 오경보를 내지 않기 위함.
         const due = new Date(NOW_KST.getTime() - RUN_GRACE_H * 3600 * 1000);
         const expected = new Date(
-          Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate(), RUN_HOUR_KST, 0, 0),
+          Date.UTC(
+            due.getUTCFullYear(),
+            due.getUTCMonth(),
+            due.getUTCDate(),
+            RUN_HOUR_KST,
+            0,
+            0,
+          ),
         );
         if (expected > due) expected.setUTCDate(expected.getUTCDate() - 1);
         while (expected.getUTCDay() === 0 || expected.getUTCDay() === 6)
@@ -1509,10 +1533,17 @@
         //   pending      = 신호는 났으나 청산일 미도래
         const head = `<b>엣지 원장(OOS)</b> · 정렬 검증 ${E.live_records || 0}거래일 · 정산 ${E.settled || 0}건 / 미정산 ${E.pending || 0}건`;
         if (h5 && h5.n > 0) {
-          const m = h5.meanPct === null ? "-" : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
-          parts.push(`${head} · 5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`);
+          const m =
+            h5.meanPct === null
+              ? "-"
+              : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
+          parts.push(
+            `${head} · 5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`,
+          );
         } else if (E.settled) {
-          parts.push(`${head} · 5일 보유 표본이 아직 최소 기준에 못 미칩니다 → <b>판정 보류</b>`);
+          parts.push(
+            `${head} · 5일 보유 표본이 아직 최소 기준에 못 미칩니다 → <b>판정 보류</b>`,
+          );
         } else {
           parts.push(
             `${head} — <b>아직 판정 불가</b>: 청산이 끝난 신호가 없습니다` +
@@ -1522,7 +1553,9 @@
         if (E.quarantined_records) {
           // 격리 기준일은 데이터에서 온다. 예전엔 '2026-08-07'이 HTML에 박혀 있었고,
           // 게다가 그 날짜 레코드 자신이 격리 대상이라 "이전"이라는 표현이 사실과 어긋났다.
-          const through = E.quarantine_through ? `${E.quarantine_through}까지` : "수집기 수정 이전";
+          const through = E.quarantine_through
+            ? `${E.quarantine_through}까지`
+            : "수집기 수정 이전";
           parts.push(
             `<span class="warn">⚠ ${through} ${E.quarantined_records}일치는 수집 결함(장중 스냅샷 오염 · 종목-지수 정렬 어긋남)으로 격리되어 증거에서 제외됐습니다.</span>`,
           );

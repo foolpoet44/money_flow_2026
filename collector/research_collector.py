@@ -32,8 +32,11 @@ import urllib.request
 import urllib.error
 
 # ── 설정 ─────────────────────────────────────────────
-# 우리가 추적하는 반도체 섹터 — 이 종목/키워드 리포트를 우선 노출한다(money flow와 연결)
-SECTOR_TICKERS = {"005930", "000660", "009150", "402340", "042700"}
+# 우리가 추적하는 섹터 — 이 종목/키워드 리포트를 우선 노출한다(money flow와 연결).
+# 종목 목록은 universe.json 단일 출처에서 읽는다(수급 collector와 같은 유니버스).
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+with open(os.path.join(_ROOT, "universe.json"), encoding="utf-8") as _fp:
+    SECTOR_TICKERS = {s["ticker"] for s in json.load(_fp)["stocks"]}
 SECTOR_KEYWORDS = ["반도체", "메모리", "HBM", "DRAM", "낸드", "파운드리", "AI 반도체"]
 
 CATEGORIES = [

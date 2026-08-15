@@ -36,10 +36,14 @@ CLOSE_MIN = 15 * 60 + 40  # 15:40 KST — 이 이후 관측이면 그 세션은 
 
 # ── 1. git 히스토리 → 확정 시계열 픽스처 ─────────────────
 def load_fixture():
-    log = subprocess.run(
-        ["git", "log", "--reverse", "--format=%H %cI", "--", "docs/data.js"],
-        cwd=ROOT, capture_output=True, text=True,
-    ).stdout.strip().split("\n")
+    # encoding 을 명시하지 않으면 로케일 인코딩으로 디코드한다. 발행본은 한글이 섞인
+    # UTF-8 이라 cp949 로케일(한국어 Windows)에서 UnicodeDecodeError 로 죽는다.
+    # ubuntu 러너가 UTF-8 이라 CI 에서만 우연히 통과하던 자리다.
+    git = lambda *a: subprocess.run(  # noqa: E731
+        ["git", *a], cwd=ROOT, capture_output=True, encoding="utf-8", errors="replace",
+    ).stdout
+
+    log = git("log", "--reverse", "--format=%H %cI", "--", "docs/data.js").strip().split("\n")
 
     obs_i = collections.defaultdict(lambda: collections.defaultdict(list))
     obs_s = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -47,9 +51,8 @@ def load_fixture():
         if not line.strip():
             continue
         sha, iso = line.split()
-        raw = subprocess.run(["git", "show", f"{sha}:docs/data.js"],
-                             cwd=ROOT, capture_output=True, text=True).stdout
-        if "{" not in raw:
+        raw = git("show", f"{sha}:docs/data.js")
+        if not raw or "{" not in raw:
             continue
         d = json.loads(raw[raw.index("{"):].strip().rstrip(";"))
         t = datetime.datetime.fromisoformat(iso) + datetime.timedelta(hours=9)
@@ -134,6 +137,10 @@ C = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(C)
 C._get_json = fake_get_json
 C.SLEEP = 0
+# 시계열 원장(docs/series/)에는 절대 쓰지 않는다. 리플레이는 창을 인위적으로 흔들어
+# 돌리므로(장중·피드지연 시나리오) 그 산출물이 누적 원장에 섞이면 테스트가 증거를
+# 오염시킨다. upsert 로직 자체는 guard.test.py 가 임시 디렉터리에서 못박는다.
+C.write_series = lambda *a, **k: 0
 _real_pending = C._pending_session_date
 
 fails = []

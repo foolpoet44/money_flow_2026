@@ -50,6 +50,22 @@ else
   # 검증할 수 없고(수정본을 돌려봐도 결과가 main 으로 나간다), 검증 없이 main 에 합치는
   # 것 말고는 선택지가 없어진다. 정기 실행은 main 을 체크아웃하므로 동작은 그대로다.
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-  git push -q origin "HEAD:${BRANCH}"
-  echo "✓ 발행·푸시 완료(${BRANCH}) → https://foolpoet44.github.io/money_flow_2026/"
+
+  # 푸시 실패 = 그날 OOS 원장 영구 유실.
+  #   러너는 매번 빈 디스크로 시작하므로 git 이 유일한 누적 매체다. 체크아웃 이후 원격이
+  #   움직였으면(수동 커밋 등) non-fast-forward 로 푸시가 막히고, run_daily.sh 는 이를
+  #   '비치명적'으로 삼킨다. 그 사이 만들어진 ledger.jsonl 한 줄은 러너와 함께 사라지고
+  #   다음 실행은 오늘 as_of 만 적재하므로 그 하루는 영영 안 돌아온다.
+  #   → 밀어내기 전에 원격을 흡수한다. 실패하면 한 번 더 시도하고, 그래도 안 되면 죽는다
+  #     (조용히 성공한 척하지 않는다 — 유실은 알려져야 한다).
+  for attempt in 1 2; do
+    git pull --rebase -q origin "$BRANCH" || true
+    if git push -q origin "HEAD:${BRANCH}"; then
+      echo "✓ 발행·푸시 완료(${BRANCH}) → https://foolpoet44.github.io/money_flow_2026/"
+      exit 0
+    fi
+    echo "⚠ 푸시 실패(${attempt}/2) — 원격을 다시 흡수하고 재시도"
+  done
+  echo "✗ 푸시 최종 실패 — 이 실행의 원장 적재분이 유실됩니다(수동 확인 필요)"
+  exit 1
 fi

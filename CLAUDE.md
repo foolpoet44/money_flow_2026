@@ -57,6 +57,9 @@
 money-flow/
 ├── CLAUDE.md                 # 이 문서
 ├── README.md                 # 실행 빠른 시작
+├── universe.json             # 추적 종목 단일 출처 (collector·research·backtest·settle 공용)
+├── .prettierignore           # 생성물 포맷 금지 (포매터 ↔ collector 왕복 diff 차단)
+├── docs/series/YYYY-MM.jsonl # 거래일별 append-only 시계열 원장 (§4.1)
 ├── collector/
 │   ├── collector.py          # [시드] pykrx 수집기
 │   ├── requirements.txt       # pykrx, pandas
@@ -82,6 +85,7 @@ money-flow/
 {
   "as_of": "2026-06-12",                  // 기준일 (모든 피드가 공통 관측한 가장 최근 확정 거래일)
   "collected_at": "2026-06-12T20:04:11+09:00",  // 수집 완료 시각 (ISO8601, KST)
+  "sessions": ["2026-05-02", ...],        // 확정 거래일 달력 (창보다 넓음, ~45일). 오름차순
   "index": {
     "KOSPI": {
       "dates":       ["2026-05-02", ...],  // length 30, ISO date, 오름차순
@@ -119,6 +123,38 @@ money-flow/
   정상(피드 게시 지연)인지 비정상(파이프라인 중단)인지 구분할 수 없어, 대시보드가 원인을 추측해
   단정하는 사고가 있었다. 소비자는 신선도를 `as_of`가 아니라 **`collected_at` 기준으로 판정**한다.
   구버전 `data.js`에는 없을 수 있으므로 소비자는 부재를 graceful하게 처리한다.
+- `sessions`는 **확정 거래일 달력**이다(2026-08-16 추가). 지수 차트가 곧 거래일 목록이므로
+  공짜로 얻는다 — 공휴일 달력 라이브러리를 들이지 않는다. 창(30일)보다 넓고(~45일),
+  `as_of`는 반드시 그 안에 있으며 미확정 세션은 절대 들어가지 않는다(`_validate`가 막는다).
+  대시보드의 '장 상태' 표시가 이걸 보고 휴장일을 판정한다. 단 **달력은 수집 시점까지만 안다** —
+  그 너머는 모르는 것으로 취급하고 시간대 판단으로 되돌아간다(§1.5). 부재는 graceful하게 처리한다.
+
+### 4.1 시계열 원장 (`docs/series/YYYY-MM.jsonl`)
+
+`data.json`은 매일 30일 창을 통째로 덮어쓴다. 창 밖 수급은 git 커밋 안에만 남아 조회가 불가능했다
+— `audit_ledger.js`와 `replay.test.py`가 `git show`로 과거 발행본을 발굴하는 기괴한 코드를 쓰는
+이유가 이것이다. **git 히스토리를 데이터베이스로 쓰는 상태**를 끝내려고 날짜별 append-only 원장을 둔다.
+
+```jsonc
+// 한 줄 = 한 거래일
+{
+  "date": "2026-08-14",
+  "index": { "KOSPI": { "foreign": -21750, "institution": 8120, "close": 3421 }, "KOSDAQ": {...} },
+  "stocks": { "005930": { "foreign": -1204, "institution": 330, "fhold": 5310 }, ... }
+}
+```
+
+**불변 규칙**
+
+- 파일은 월별 분할(`2026-08.jsonl`), 파일 안은 `date` 오름차순, 날짜당 정확히 한 줄.
+- 매 실행이 **창 전체(30일)를 upsert**한다. 하루가 통째로 실패해도 다음 실행이 스스로 메운다 —
+  결손이 영구화되지 않는다(원장 결손은 이미 6거래일 겪은 사고 유형이다).
+- 미확정 세션은 애초에 창에 없으므로 장중 값이 섞일 경로가 없다.
+- `fhold`가 없는 종목은 **키 자체를 넣지 않는다**(계약 §4의 빈 배열 허용과 같은 취지).
+- `docs/` 아래 두어 `publish.sh`의 `git add docs`가 그대로 영속화한다. 스냅샷이 아니라
+  누적물이므로 `dashboard/ → docs/` 복사 경로를 타지 않는다.
+- 테스트는 이 원장에 절대 쓰지 않는다(`replay.test.py`가 `write_series`를 스텁으로 막는다).
+  upsert 로직 자체는 `guard.test.py`가 임시 디렉터리에서 못박는다.
 
 ---
 

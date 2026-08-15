@@ -31,20 +31,22 @@ import re
 import json
 import time
 import datetime
+import collections
 import urllib.request
 import urllib.error
 
 # ── 설정 ─────────────────────────────────────────────
 N_TRADING_DAYS = 30
 FETCH_SLACK = 8    # 미확정 캔들을 버려도 30개가 남도록 넉넉히 받아온다
-SECTOR_NAME = "반도체"
-SECTOR = [
-    ("005930", "삼성전자"),
-    ("000660", "SK하이닉스"),
-    ("009150", "삼성전기"),
-    ("402340", "SK스퀘어"),
-    ("042700", "한미반도체"),
-]
+
+# 추적 유니버스는 universe.json 단일 출처에서 읽는다(리포 루트).
+# 예전엔 같은 5종목이 네 파일에 각각 박혀 있어, 하나를 빠뜨리면 조용히 어긋났다.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+with open(os.path.join(_ROOT, "universe.json"), encoding="utf-8") as _fp:
+    _UNIVERSE = json.load(_fp)
+SECTOR_NAME = _UNIVERSE["sector"]
+SECTOR = [(s["ticker"], s["name"]) for s in _UNIVERSE["stocks"]]
+
 MARKETS = ["KOSPI", "KOSDAQ"]
 
 EOK = 1e8  # 억원 환산 (원 → 억원)
@@ -249,6 +251,78 @@ def common_window(cal, smaps, dated_tickers, n=N_TRADING_DAYS):
     return window
 
 
+# ── 시계열 원장 (append-only) ────────────────────────
+def series_rows(data):
+    """계약(data.json)을 거래일 단위 행으로 뒤집는다. (날짜, 행) 을 순서대로 내놓는다."""
+    idx, stocks = data["index"], data["sector"]["stocks"]
+    for i, d in enumerate(idx["KOSPI"]["dates"]):
+        yield d, {
+            "date": d,
+            "index": {
+                m: {
+                    "foreign": idx[m]["foreign"][i],
+                    "institution": idx[m]["institution"][i],
+                    "close": idx[m]["close"][i],
+                }
+                for m in MARKETS
+            },
+            "stocks": {
+                s["ticker"]: dict(
+                    {"foreign": s["foreign"][i], "institution": s["institution"][i]},
+                    # fhold 는 계약상 비어 있을 수 있다 — 없으면 키 자체를 안 넣는다.
+                    **({"fhold": s["fhold"][i]} if s["fhold"] else {}),
+                )
+                for s in stocks
+            },
+        }
+
+
+def write_series(data, out_dir):
+    """확정 거래일을 월별 JSONL 에 upsert 한다. 30일 창 밖 데이터의 유일한 보존처.
+
+    왜 필요한가:
+        data.json 은 매일 30일 창을 통째로 덮어쓴다. 창을 벗어난 수급은 git 커밋
+        안에만 남아 조회가 불가능했다 — audit_ledger.js 와 replay.test.py 가
+        `git show` 로 과거 발행본을 발굴하는 기괴한 코드를 쓰는 이유가 이것이다.
+        git 히스토리를 데이터베이스로 쓰는 상태를 끝내고 시간축을 만든다.
+
+    왜 오늘 하루가 아니라 창 '전체'를 매번 upsert 하는가:
+        발행(push)이 실패한 날은 그날 줄이 통째로 유실된다. 다음 실행이 30일 창을
+        전부 다시 써 넣으므로 결손이 스스로 메워진다 — 사람이 알아채지 않아도 낫는다.
+        미확정 세션은 애초에 창에 없으므로(_pending_session_date 가드) 장중 값이
+        섞여 들어올 경로는 없다.
+
+    반환: 새로 추가된 거래일 수(기존 값 갱신은 세지 않는다).
+    """
+    by_month = collections.defaultdict(dict)
+    for d, row in series_rows(data):
+        by_month[d[:7]][d] = row          # 'YYYY-MM' 파일로 분할
+
+    os.makedirs(out_dir, exist_ok=True)
+    added = 0
+    for month, rows in sorted(by_month.items()):
+        path = os.path.join(out_dir, f"{month}.jsonl")
+        merged = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fp:
+                for line in fp:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue          # 깨진 줄은 버린다 — 재수집이 메운다
+                    merged[r["date"]] = r
+        before = set(merged)
+        merged.update(rows)               # 확정본이 항상 이긴다
+        added += len(set(merged) - before)
+        with open(path, "w", encoding="utf-8") as fp:
+            for d in sorted(merged):
+                fp.write(json.dumps(merged[d], ensure_ascii=False) + "\n")
+    return added
+
+
 # ── 스키마 검증 (계약 §4 불변 규칙) ──────────────────
 def _validate(data, pending=None):
     """data.json이 계약을 만족하는지 최소 검증. 실패 시 예외로 중단."""
@@ -259,6 +333,12 @@ def _validate(data, pending=None):
     # 신선도 판정의 근거이므로 비어 있으면 안 된다(계약 §4).
     if not data.get("collected_at"):
         errs.append("collected_at 누락 — 대시보드가 신선도를 판정할 수 없다")
+    # sessions 는 '확정 거래일 달력'이다. 창(as_of)이 그 안에 없으면 둘 중 하나가 틀렸다.
+    if data.get("sessions"):
+        if pending and pending in data["sessions"]:
+            errs.append(f"sessions 에 미확정 세션 {pending} 포함 — 장중 데이터 유출")
+        if data["as_of"] not in data["sessions"]:
+            errs.append(f"as_of={data['as_of']} 가 sessions 에 없다 — 달력·창 불일치")
     for mkt in MARKETS:
         d = data["index"][mkt]
         for key in ("dates", "foreign", "institution", "close"):
@@ -347,6 +427,10 @@ def main():
         # 수집이 실제로 돈 시각(계약 §4). as_of 만으로는 '기준일이 어제'가 정상(피드 게시 지연)인지
         # 비정상(파이프라인 중단)인지 구분할 수 없어, 대시보드가 원인을 추측해 단정하는 사고가 있었다.
         "collected_at": datetime.datetime.now(KST).isoformat(timespec="seconds"),
+        # 확정 거래일 달력(창보다 넓다). 지수 차트가 곧 거래일 목록이므로 공짜로 얻는다.
+        # 대시보드의 '장 상태' 표시가 이걸 보고 휴장일을 판정한다 — 예전엔 주말만 알아서
+        # 공휴일에도 '장중'이라고 표시했다. 공휴일 달력 라이브러리를 들이지 않고 푼다.
+        "sessions": sorted(set(cal["KOSPI"]) & set(cal["KOSDAQ"])),
         "index": index,
         "sector": {"name": SECTOR_NAME, "stocks": stocks},
     }
@@ -366,6 +450,12 @@ def main():
     with open(js_path, "w", encoding="utf-8") as fp:
         fp.write("window.DATA = " + payload + ";\n")
     print(f"✓ data.json + dashboard/data.js 생성 완료 · 기준일 {data['as_of']} · 거래일 {N_TRADING_DAYS}개")
+
+    # 시계열 원장 — docs/ 아래에 두어 publish.sh 의 `git add docs` 가 그대로 영속화한다.
+    # (스냅샷이 아니라 누적물이라 dashboard/ → docs/ 복사 경로를 타지 않는다)
+    series_dir = os.path.join(root, "docs", "series")
+    added = write_series(data, series_dir)
+    print(f"✓ 시계열 원장 갱신 · docs/series/ · 신규 거래일 {added}일")
 
 
 if __name__ == "__main__":

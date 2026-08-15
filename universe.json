@@ -1,0 +1,11 @@
+{
+  "_comment": "추적 유니버스 단일 출처. 예전엔 이 5종목이 collector.py·research_collector.py·fetch_history.py·settle.js 네 곳에 각각 박혀 있었고, 종목을 하나 추가하려면 네 곳을 고쳐야 했다 — 하나를 빠뜨리면 조용히 어긋난다(이 프로젝트가 이미 겪은 사고 유형). 여기만 고친다.",
+  "sector": "반도체",
+  "stocks": [
+    { "ticker": "005930", "name": "삼성전자" },
+    { "ticker": "000660", "name": "SK하이닉스" },
+    { "ticker": "009150", "name": "삼성전기" },
+    { "ticker": "402340", "name": "SK스퀘어" },
+    { "ticker": "042700", "name": "한미반도체" }
+  ]
+}

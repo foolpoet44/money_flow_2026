@@ -38,6 +38,15 @@ log "── 데일리 사이클 시작 ──"
 log "수집기 가드 테스트"
 python3 collector/guard.test.py >>"$LOG" 2>&1
 
+# 0-2) 데일리 사이클 리플레이 (네트워크 불필요 · git 히스토리 픽스처)
+#    guard.test.py 는 순수 함수 단위를 못박지만, "수집기 전체가 장중에 돌면 무슨 일이
+#    벌어지는가"는 단위 테스트로 표현되지 않는다. 2026-08-07 사고가 정확히 그 틈에서 났다
+#    — 개별 함수는 다 정상이었고 조합과 실행 시각이 문제였다. 그 통합 테스트가 그동안
+#    수동 전용이라 아무도 안 돌렸다. 가장 비싼 사고를 막는 테스트를 게이트에 세운다.
+#    수집보다 먼저 돌린다 — 리플레이는 끝에서 data.json/dashboard/data.js 를 지운다.
+log "데일리 사이클 리플레이 테스트"
+python3 collector/replay.test.py >>"$LOG" 2>&1
+
 # 1) 수급·지수 수집 (실패 시 중단 — 직전 data.js가 화면에 남는다)
 log "수급 수집 (collector.py)"
 python3 collector/collector.py >>"$LOG" 2>&1
@@ -65,10 +74,14 @@ node backtest/settle.js >>"$LOG" 2>&1 || log "⚠ 정산 실패(비치명적)"
 log "다이제스트 생성"
 node scripts/digest.js | tee -a "$LOG"
 
-# 7) 대시보드 발행 (GitHub Pages) — 실패해도 치명적 아님(로컬 화면은 정상)
+# 7) 대시보드 발행 (GitHub Pages)
+#    무인 클라우드 실행에서는 '비치명적'이 아니다 — 러너는 빈 디스크로 시작하므로
+#    푸시가 안 되면 오늘 적재한 OOS 원장 한 줄과 시계열 원장이 러너와 함께 사라진다.
+#    그래서 실패를 로그로만 넘기지 않고 잡을 빨갛게 만든다(실패 알림이 뜬다).
 log "대시보드 발행 (GitHub Pages)"
 if ! scripts/publish.sh >>"$LOG" 2>&1; then
-  log "⚠ 발행 실패(푸시 권한/네트워크) — Pages만 미갱신, 로컬·텔레그램은 정상"
+  log "✗ 발행 실패 — 이 실행의 원장 적재분이 유실됩니다(수동 확인 필요)"
+  exit 1
 fi
 
 log "── 데일리 사이클 완료 ──"

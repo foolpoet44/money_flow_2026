@@ -22,14 +22,14 @@ const S = require(path.join(__dirname, "stats.js"));
 const { HORIZONS, COST } = S.CONFIG;
 const { mean, tstat, pct, verdict } = S;
 
-// 종목명 → 티커 (원장은 종목명으로 기록되므로 가격 조회용 매핑)
-const TICKER = {
-  삼성전자: "005930",
-  SK하이닉스: "000660",
-  삼성전기: "009150",
-  SK스퀘어: "402340",
-  한미반도체: "042700",
-};
+// 종목명 → 티커 (원장은 종목명으로 기록되므로 가격 조회용 매핑).
+// 목록은 universe.json 단일 출처에서 뒤집어 만든다 — 예전엔 여기에 5종목이 또 박혀 있어,
+// 유니버스를 늘리면 정산만 조용히 옛 종목을 보고 있었다.
+const TICKER = Object.fromEntries(
+  JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, "..", "universe.json"), "utf8"),
+  ).stocks.map((s) => [s.name, s.ticker]),
+);
 
 const HEADERS = {
   "User-Agent":
@@ -165,7 +165,11 @@ async function main() {
   //            (audit_ledger.js 참조 — 오프셋이 상수가 아니라 복원 불가로 판정)
   //   seeded — history 재생. in-sample 참고용.
   // 격리분을 정본에 섞으면 훼손된 표본이 깨끗한 증거로 둔갑한다. 절대 합치지 않는다.
-  const store = { seeded: emptyBuckets(), live: emptyBuckets(), legacy: emptyBuckets() };
+  const store = {
+    seeded: emptyBuckets(),
+    live: emptyBuckets(),
+    legacy: emptyBuckets(),
+  };
   const counts = {
     seeded: { settled: 0, pending: 0, expired: 0 },
     live: { settled: 0, pending: 0, expired: 0 },
@@ -252,7 +256,8 @@ async function main() {
           .slice(-1)[0]
       : null,
     live_records: records.filter((r) => !r.seeded && r.date_aligned).length,
-    quarantined_records: records.filter((r) => !r.seeded && !r.date_aligned).length,
+    quarantined_records: records.filter((r) => !r.seeded && !r.date_aligned)
+      .length,
     // 격리 구간의 마지막 기준일. 소비자(대시보드·다이제스트)가 문구를 데이터에서 만들도록 노출한다.
     // 예전엔 '2026-08-07'이 HTML·digest 양쪽에 문자열로 박혀 있었고, 그 날짜 레코드 자신이
     // 격리 대상이라 "…이전"이라는 표현이 사실과 어긋났다.

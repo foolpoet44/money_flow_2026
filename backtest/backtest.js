@@ -19,7 +19,7 @@ const E = require(path.join(__dirname, "..", "dashboard", "signal_engine.js"));
 const S = require(path.join(__dirname, "stats.js"));
 
 // 공유 방법론(stats.js) — backtest와 settle이 같은 잣대를 쓴다
-const { WARMUP, HORIZONS, COST } = S.CONFIG;
+const { WARMUP, HORIZONS, COST, MIN_N } = S.CONFIG;
 const { mean, tstat, pct, verdict } = S;
 
 const hist = JSON.parse(

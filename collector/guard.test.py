@@ -122,6 +122,61 @@ try:
 except AssertionError as e:
     check("collected_at 누락 차단", any("collected_at" in ln for ln in str(e).splitlines()), True)
 
+print("· 시계열 원장 upsert (30일 창 밖 데이터의 유일한 보존처)")
+import json          # noqa: E402 — 이 섹션에서만 쓴다
+import shutil        # noqa: E402
+import tempfile      # noqa: E402
+
+
+def _mini(dates, kospi_foreign, samsung_foreign):
+    """계약 모양의 최소 데이터. 길이 검증은 여기서 하지 않는다(write_series 만 본다)."""
+    n = len(dates)
+    return {
+        "index": {
+            m: {"dates": dates, "foreign": kospi_foreign,
+                "institution": [0] * n, "close": [2700] * n}
+            for m in C.MARKETS
+        },
+        "sector": {"stocks": [{"ticker": "005930", "foreign": samsung_foreign,
+                               "institution": [0] * n, "fhold": [5310] * n}]},
+    }
+
+
+tmp = tempfile.mkdtemp()
+try:
+    d1 = ["2026-07-30", "2026-07-31", "2026-08-03"]      # 월 경계를 걸친다
+    added = C.write_series(_mini(d1, [10, 20, 30], [1, 2, 3]), tmp)
+    check("첫 적재는 3거래일 신규", added, 3)
+    check("월별로 파일이 갈린다", sorted(os.listdir(tmp)), ["2026-07.jsonl", "2026-08.jsonl"])
+
+    def rows(month):
+        with open(os.path.join(tmp, f"{month}.jsonl"), encoding="utf-8") as fp:
+            return [json.loads(ln) for ln in fp if ln.strip()]
+
+    check("7월 파일에 2거래일", [r["date"] for r in rows("2026-07")], d1[:2])
+    check("값이 날짜별로 실린다", rows("2026-07")[0]["index"]["KOSPI"]["foreign"], 10)
+    check("종목은 티커 키로", rows("2026-07")[0]["stocks"]["005930"]["foreign"], 1)
+
+    # 같은 실행을 두 번 — 멱등이어야 한다(발행 재시도·수동 재실행 안전)
+    check("재실행은 신규 0건(멱등)", C.write_series(_mini(d1, [10, 20, 30], [1, 2, 3]), tmp), 0)
+    check("줄 수도 그대로", len(rows("2026-07")), 2)
+
+    # 창이 하루 전진 — 겹치는 날은 확정본으로 갱신되고, 새 날만 신규로 센다
+    d2 = ["2026-07-31", "2026-08-03", "2026-08-04"]
+    check("창 전진 시 신규는 1건", C.write_series(_mini(d2, [99, 30, 40], [9, 3, 4]), tmp), 1)
+    aug = rows("2026-08")
+    check("8월이 날짜 오름차순", [r["date"] for r in aug], ["2026-08-03", "2026-08-04"])
+    check("겹친 날은 최신 확정값으로 갱신", rows("2026-07")[1]["index"]["KOSPI"]["foreign"], 99)
+
+    # fhold 는 계약상 비어 있을 수 있다 — 그때는 키를 넣지 않는다
+    empty_fhold = _mini(["2026-08-05"], [1], [1])
+    empty_fhold["sector"]["stocks"][0]["fhold"] = []
+    C.write_series(empty_fhold, tmp)
+    check("fhold 빈 배열이면 키 없음",
+          "fhold" in rows("2026-08")[-1]["stocks"]["005930"], False)
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+
 print()
 if fails:
     print(f"✗ 가드 테스트 실패 {len(fails)}건")

@@ -10,14 +10,19 @@
 ```
 money_flow_2606/
 ├── CLAUDE.md                  # 설계 정본 (데이터 계약 §4, 신호 엔진 §5)
+├── universe.json              # 추적 종목 단일 출처 — 종목 추가는 여기만 고친다
 ├── collector/
-│   ├── collector.py           # 수급·지수 수집(네이버 JSON API) → data.json + data.js
+│   ├── collector.py           # 수급·지수 수집(네이버 JSON API) → data.json + data.js + docs/series/
 │   ├── research_collector.py  # 증권사 리포트 수집(네이버 리서치) → research.json + research.js
+│   ├── guard.test.py          # 장중 캔들 가드·시계열 upsert 테스트 (데일리 게이트)
+│   ├── replay.test.py         # 사이클 통합 리플레이 (네트워크 불필요, 데일리 게이트)
 │   └── requirements.txt       # 외부 의존성 없음(표준 라이브러리)
 ├── dashboard/
 │   ├── index.html             # 대시보드 (실데이터 우선, 합성 fallback)
 │   ├── signal_engine.js       # 신호 엔진(§5 정본, 순수함수)
 │   └── signal_engine.test.js  # 단위 테스트 (node로 실행)
+├── docs/                      # GitHub Pages 발행본 (publish.sh가 생성 — 직접 편집하지 않는다)
+│   └── series/YYYY-MM.jsonl   # 거래일별 append-only 시계열 원장 (§4.1)
 └── scripts/                   # 자동화 진입점 (Sprint 4)
 ```
 
@@ -77,6 +82,15 @@ node   backtest/settle.js          # 원장 신호에 실현수익 결합·재�
 ```
 
 `backtest.js`(과거 재생)는 과최적화 위험이 있는 반면 `settle.js`는 **기록 시점에 미래를 몰랐던** 원장을 정산하므로 가장 정직한 증거다(공유 잣대 `stats.js`). 시딩 정산이 `backtest.js`와 숫자가 일치함으로 정산 로직을 교차검증했고, 라이브 OOS 표본은 매일 누적된다.
+
+### 시계열 원장 (`docs/series/`)
+
+`data.json`은 30일 창을 매일 덮어쓴다. 창 밖 수급은 `docs/series/YYYY-MM.jsonl`에 거래일 한 줄씩 누적된다(계약 §4.1). collector가 매 실행마다 창 전체를 upsert하므로, 하루 실패해도 다음 실행이 스스로 메운다.
+
+```bash
+# 8월 KOSPI 외국인 수급만 뽑아보기
+cat docs/series/2026-08.jsonl | node -e 'require("readline").createInterface({input:process.stdin}).on("line",l=>{const r=JSON.parse(l);console.log(r.date, r.index.KOSPI.foreign)})'
+```
 
 > **첫 판정(2026-03~06, 60거래일):** 방향성 모드(신호대로 매수=롱·매도=숏)는 비용 차감 후 **전 구간 노이즈 또는 손실**이며, 최상위 "Critical" 등급이 10일 −9.1%(t=−2.04)로 **가장 나빴다.** Long-only가 양(+)으로 보이는 건 대부분 상승장 드리프트(기준선)와 겹치는 구간·표본부족 탓이다. **이 표본으로 "엣지 있음"을 주장할 수 없다.** 신호는 매매 트리거가 아니라 관찰 보조로만 쓰고, 라이브 원장으로 표본을 누적해 재판정할 것.
 
