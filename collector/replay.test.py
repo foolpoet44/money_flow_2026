@@ -82,6 +82,18 @@ def load_fixture():
     return idx, stk, days
 
 
+# 테스트 시작 시점의 산출물을 '내용째' 기억해 둔다.
+#   파일 존재 여부만 기억하면 부족하다 — 리플레이는 collector.main() 을 실제로 돌리므로
+#   기존 파일을 픽스처 출력으로 덮어쓴다. 그러면 지우는 것보다 나쁘다: 진짜처럼 보이는
+#   가짜가 남고, 대시보드가 그걸 실수급으로 렌더한다(§1.5).
+_OUTPUTS = ("data.json", os.path.join("dashboard", "data.js"))
+_PRE_CONTENT = {}
+for _f in _OUTPUTS:
+    _p = os.path.join(ROOT, _f)
+    if os.path.exists(_p):
+        with open(_p, "rb") as _fp:
+            _PRE_CONTENT[_f] = _fp.read()
+
 IDX, STK, ALL_DAYS = load_fixture()
 if len(ALL_DAYS) < 32:
     print(f"✗ 픽스처 거래일 {len(ALL_DAYS)}일 — 리플레이에 부족합니다(32일 이상 필요)")
@@ -195,11 +207,22 @@ expect("지수 foreign 이 날짜별 원본과 일치(불일치 건수)", len(ba
 expect("KOSPI·KOSDAQ 날짜 동일", d["index"]["KOSPI"]["dates"] == d["index"]["KOSDAQ"]["dates"], True)
 
 # 리플레이 산출물은 실수집이 아니므로 남기지 않는다 — 원장·발행본을 오염시키지 않기 위함.
-for f in ("data.json", os.path.join("dashboard", "data.js")):
-    try:
-        os.remove(os.path.join(ROOT, f))
-    except OSError:
-        pass
+#
+# 단 '자기가 만든 것만' 치운다. 예전엔 무조건 지워서, 로컬에서 실수집을 돌려 둔 뒤
+# 이 테스트를 돌리면 진짜 data.json 이 조용히 사라졌다. 파이프라인은 리플레이를 수집보다
+# 먼저 돌리므로 안 물리지만, 손으로 쓰는 순서까지 그렇지는 않다.
+for f in _OUTPUTS:
+    p = os.path.join(ROOT, f)
+    if f in _PRE_CONTENT:
+        with open(p, "wb") as fp:      # 원래 내용으로 되돌린다
+            fp.write(_PRE_CONTENT[f])
+    else:
+        try:
+            os.remove(p)               # 이 테스트가 만든 것만 지운다
+        except OSError:
+            pass
+if _PRE_CONTENT:
+    print(f"· 기존 수집 산출물 {len(_PRE_CONTENT)}개를 원래 내용으로 복원했습니다.")
 
 print()
 if fails:

@@ -18,8 +18,6 @@ import os
 import json
 import time
 import importlib.util
-import urllib.request
-import urllib.error
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -40,42 +38,16 @@ _C = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_C)
 
 PAGE_SIZE = 60          # 네이버 trend 실측 상한(70부터 HTTP 400). ~3개월치가 천장.
-EOK = 1e8
-RETRY = 3
-SLEEP = 0.25
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
-                  "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-    "Referer": "https://m.stock.naver.com/",
-}
 
-
-def _get_json(url):
-    last = None
-    for attempt in range(1, RETRY + 1):
-        try:
-            req = urllib.request.Request(url, headers=HEADERS)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
-            last = e
-            time.sleep(SLEEP * attempt * 2)
-    raise RuntimeError(f"네이버 호출 실패({RETRY}회): {url}\n  {last!r}")
-
-
-def _signed_int(s):
-    s = str(s).replace(",", "").replace("+", "").strip()
-    return int(float(s)) if s and s not in ("-", "") else 0
-
-
-def _num(s):
-    return float(str(s).replace(",", "").strip())
-
-
-def _iso(yyyymmdd):
-    s = str(yyyymmdd)
-    return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
-
+# HTTP 호출·숫자 파싱은 collector 의 것을 그대로 쓴다.
+# 예전에는 _get_json/_signed_int/_num/_iso 가 여기에 글자 단위로 복제돼 있었다.
+# 같은 피드를 읽는 두 파일이 파서를 따로 들고 있으면, 한쪽만 고친 순간
+# 백테스트가 대시보드와 '다른 숫자'를 보게 된다 — 그러면 백테스트가 정직하지 않다.
+_get_json = _C._get_json
+_signed_int = _C._signed_int
+_num = _C._num
+EOK = _C.EOK
+SLEEP = _C.SLEEP        # 호출 간 간격도 같은 값을 쓴다(네이버 레이트리밋 회피 기준 통일)
 
 def stock_history(ticker, pending=None):
     url = f"https://m.stock.naver.com/api/stock/{ticker}/trend?pageSize={PAGE_SIZE}"

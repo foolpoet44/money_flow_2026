@@ -34,6 +34,18 @@ if [ -f backtest/edge_status.json ]; then
   { printf 'window.EDGE = '; cat backtest/edge_status.json; printf ';\n'; } > dashboard/edge.js
   cp dashboard/edge.js docs/edge.js
 fi
+
+# OOS 원장 자체도 화면에 낸다. edge_status 는 집계 한 줄이라 "표본이 자라는 중"이 안 보였다.
+# JSONL → JS 배열 변환은 node 로 한다(셸 문자열 조립은 따옴표·이스케이프에서 조용히 깨진다).
+if [ -f backtest/ledger.jsonl ]; then
+  node -e '
+    const fs = require("fs");
+    const rows = fs.readFileSync("backtest/ledger.jsonl", "utf8")
+      .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    fs.writeFileSync("dashboard/ledger.js", "window.LEDGER = " + JSON.stringify(rows) + ";\n");
+  '
+  cp dashboard/ledger.js docs/ledger.js
+fi
 touch docs/.nojekyll   # Jekyll 빌드 비활성(정적 파일 그대로 서빙)
 
 git add docs

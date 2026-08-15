@@ -523,6 +523,100 @@
         font-weight: 600;
       }
 
+      /* ---------- 신호 이력 (OOS 원장) ---------- */
+      .ledger {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 20px;
+      }
+      .lg-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        margin-bottom: 14px;
+      }
+      .lg-head .t {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .lg-head .sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .lg-strip {
+        display: flex;
+        gap: 2px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .lg-day {
+        width: 11px;
+        height: 24px;
+        border-radius: 2px;
+        background: var(--line);
+      }
+      .lg-day.watch {
+        background: var(--watch);
+      }
+      .lg-day.alert {
+        background: var(--alert);
+      }
+      .lg-day.critical {
+        background: var(--critical);
+      }
+      /* 격리 구간은 '있었지만 증거로 안 쓴다'를 시각적으로 말한다 — 지우지 않고 흐린다 */
+      .lg-day.quar {
+        opacity: 0.22;
+      }
+      .lg-legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 16px;
+      }
+      .lg-legend i {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        margin-right: 5px;
+        vertical-align: baseline;
+      }
+      .lg-row {
+        display: grid;
+        grid-template-columns: 84px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 0;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .lg-row .d {
+        color: var(--muted);
+      }
+      .lg-row .z {
+        color: var(--muted);
+      }
+      .lg-none {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 10px 0;
+      }
+      @media (max-width: 560px) {
+        .lg-row {
+          grid-template-columns: 72px 1fr;
+        }
+        .lg-row .z {
+          grid-column: 2;
+          text-align: right;
+        }
+      }
+
       /* ---------- sector grid ---------- */
       .sector {
         display: grid;
@@ -975,6 +1069,14 @@
       </div>
       <div class="verify" id="verifyNote"></div>
 
+      <!-- 신호 이력 · OOS 원장 (window.LEDGER 없으면 섹션 전체 숨김) -->
+      <div class="eyebrow" id="ledgerEyebrow" style="display: none">
+        <span class="num">LG</span>
+        <h2>신호 이력 · OOS 원장</h2>
+        <div class="rule"></div>
+      </div>
+      <div id="ledgerBox"></div>
+
       <!-- RESEARCH DIGEST (별도 모듈 · window.RESEARCH 없으면 숨김) -->
       <div class="eyebrow" id="researchEyebrow" style="display: none">
         <span class="num">RD</span>
@@ -1013,6 +1115,9 @@
     <!-- 시계열 원장(window.SERIES · 계약 §4.1). data.js 의 30일 창을 넘어선 이력.
          없으면 차트는 계약의 30일만 그린다(graceful). -->
     <script src="series.js"></script>
+
+    <!-- OOS 원장(window.LEDGER). publish.sh 가 ledger.jsonl 에서 굽는다. 없으면 섹션 숨김. -->
+    <script src="ledger.js"></script>
 
     <!-- uPlot (MIT · vendor/uPlot.LICENSE). npm 아님 — 파일을 직접 두어 빌드 단계를
          만들지 않고 file:// 동작을 유지한다(§6). 외부 요청 없음을 확인하고 넣었다. -->
@@ -1440,6 +1545,92 @@
     ${aligned ? '<b style="color:var(--inflow)">같은 방향</b>으로 정렬됩니다. 지수와 주력 섹터가 동조할 때 신호 신뢰도가 상승합니다' : '<b style="color:var(--alert)">반대 방향</b>으로 갈립니다. 지수 전체와 섹터 흐름이 갈릴 때는 등급을 한 단계 보수적으로 봅니다'}.</p>
     <p>판정 기준은 횡단면(남들 대비)이 아니라 각 지표 자신의 30거래일 시계열 분포입니다 — ergodicity 관점에서, 흐름의 비정상성은 "그 자산 자신의 역사"에 대해서만 정의됩니다.</p>`;
       }
+
+      /* ---- 신호 이력 · OOS 원장 (window.LEDGER 소비, 없으면 섹션 숨김) ----
+         등급 A/B/C 를 매일 보여주면서 "그 신호가 그동안 몇 번 났고 얼마나 쌓였는가"는
+         화면에 없었다. edge-strip 한 줄로 집계만 말할 뿐이라, 표본이 자라는 게 안 보였다.
+
+         이 섹션은 판정을 주장하지 않는다. 판정은 표본이 MIN_N 을 넘어야 가능하고
+         지금은 못 넘었다 — 그 사실 자체를 눈에 보이게 두는 것이 목적이다.
+         격리 구간은 지우지 않고 흐리게 남긴다: 있었지만 증거로 쓰지 않는다는 진술이다. */
+      (function renderLedger() {
+        const box = document.getElementById("ledgerBox");
+        const L = Array.isArray(window.LEDGER) ? window.LEDGER : [];
+        if (!box || !L.length) return; // 원장이 없으면 섹션을 아예 띄우지 않는다
+
+        const rank = { critical: 0, alert: 1, watch: 2 };
+        const rows = L.slice().sort((a, b) => (a.as_of < b.as_of ? -1 : 1));
+        const live = rows.filter((r) => !r.seeded && r.date_aligned);
+        const quar = rows.filter((r) => !r.seeded && !r.date_aligned);
+
+        // 날짜별 스트립 — 그날의 '가장 강한' 신호로 칸 색을 정한다
+        const strip = rows
+          .filter((r) => !r.seeded)
+          .map((r) => {
+            const top = (r.signals || []).reduce(
+              (best, s) =>
+                best === null || rank[s.tier] < rank[best] ? s.tier : best,
+              null,
+            );
+            const cls = [top || "", r.date_aligned ? "" : "quar"]
+              .filter(Boolean)
+              .join(" ");
+            const n = (r.signals || []).length;
+            const state = r.date_aligned ? "정렬 검증" : "격리";
+            return `<div class="lg-day ${cls}" title="${r.as_of} · 신호 ${n}건 · ${state}"></div>`;
+          })
+          .join("");
+
+        // 라이브 신호 목록 — 최근 것부터. 격리분은 증거가 아니므로 목록에 올리지 않는다.
+        const sigs = [];
+        live
+          .slice()
+          .reverse()
+          .forEach((r) =>
+            (r.signals || []).forEach((s) =>
+              sigs.push({ date: r.as_of, ...s }),
+            ),
+          );
+
+        const liveSignalCount = sigs.length;
+        const list = sigs.length
+          ? sigs
+              .slice(0, 12)
+              .map(
+                (s) => `<div class="lg-row">
+      <span class="d mono">${s.date}</span>
+      <span><span class="tier-tag ${s.tier}">● ${s.tier.toUpperCase()}</span> ${s.scope} ${s.dir > 0 ? "매수" : s.dir < 0 ? "매도" : ""}</span>
+      <span class="z mono">z ${Number(s.z).toFixed(2)} · ${s.conf}조류</span>
+    </div>`,
+              )
+              .join("")
+          : `<div class="lg-none">정렬 검증 구간에서 아직 생성된 종목 신호가 없습니다.</div>`;
+
+        // 판정 가능 여부는 edge_status(정산 표본) 기준이다. 원장 '거래일 수'와 혼동하지 않는다.
+        const E = typeof window.EDGE !== "undefined" && window.EDGE;
+        const settled = E ? E.settled || 0 : 0;
+        const verdictLine = settled
+          ? `정산 ${settled}건 — 표본이 판정 기준에 못 미쳐 <b>판정 보류</b>`
+          : `청산이 끝난 신호가 없어 <b>판정 불가(미측정)</b>`;
+
+        box.innerHTML = `<div class="ledger">
+    <div class="lg-head">
+      <span class="t">기록 시점에 미래를 몰랐던 신호들</span>
+      <span class="sub">정렬 검증 <b>${live.length}거래일</b> · 신호 <b>${liveSignalCount}건</b> · 격리 <b>${quar.length}거래일</b></span>
+    </div>
+    <div class="lg-strip">${strip}</div>
+    <div class="lg-legend">
+      <span><i style="background:var(--critical)"></i>Critical</span>
+      <span><i style="background:var(--alert)"></i>Alert</span>
+      <span><i style="background:var(--watch)"></i>Watch</span>
+      <span><i style="background:var(--line)"></i>신호 없음</span>
+      <span><i style="background:var(--muted-2);opacity:.22"></i>격리(증거 제외)</span>
+    </div>
+    ${list}
+    <div class="chart-hint" style="margin-top:12px">${verdictLine} · 표본은 매 거래일 자동으로 쌓인다</div>
+  </div>`;
+        document.getElementById("ledgerEyebrow").style.display = "";
+      })();
 
       /* ---- 리서치 다이제스트 (window.RESEARCH 소비, 없으면 섹션 숨김) ---- */
       function renderResearch() {
