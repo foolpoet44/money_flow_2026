@@ -16,6 +16,8 @@
       crossorigin
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
     />
+    <!-- uPlot 기본 스타일(로컬 벤드링). 다크 오버라이드는 아래 <style> 에 있다. -->
+    <link rel="stylesheet" href="vendor/uPlot.min.css" />
     <style>
       :root {
         --ink: #0b1115;
@@ -477,22 +479,48 @@
         color: var(--bone);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
       }
-      .chart-legend {
-        display: flex;
-        gap: 16px;
-        font-size: 11px;
-        color: var(--muted);
-        margin: 14px 0 6px;
-      }
+      /* ---------- uPlot 다크 테마 오버라이드 ----------
+         uPlot 기본 스타일은 라이트다. 축·격자 색은 JS opts 로(캔버스에 그려지므로),
+         범례·커서·드래그 선택 영역은 DOM 이라 여기서 맞춘다. */
       #indexChart {
         width: 100%;
-        height: 260px;
-        display: block;
+        min-height: 300px;
+      }
+      #indexChart .u-legend {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      #indexChart .u-legend .u-marker {
+        border-radius: 2px;
+      }
+      #indexChart .u-legend .u-value {
+        font-family: "IBM Plex Mono", monospace;
+        color: var(--bone);
+      }
+      #indexChart .u-legend th {
+        font-weight: 600;
+      }
+      #indexChart .u-select {
+        background: rgba(236, 231, 218, 0.07);
+      }
+      #indexChart .u-cursor-x,
+      #indexChart .u-cursor-y {
+        border-color: var(--line-strong) !important;
       }
       .chart-note {
         font-size: 11px;
         color: var(--muted-2);
         margin-top: 8px;
+      }
+      .chart-hint {
+        font-size: 11px;
+        color: var(--muted-2);
+        margin-top: 6px;
+      }
+      .chart-hint b {
+        color: var(--muted);
+        font-weight: 600;
       }
 
       /* ---------- sector grid ---------- */
@@ -919,21 +947,16 @@
             <button class="on" data-mkt="KOSPI">KOSPI</button>
             <button data-mkt="KOSDAQ">KOSDAQ</button>
           </div>
+          <div class="toggle" id="rangeToggle">
+            <button class="on" data-range="30">30일</button>
+            <button data-range="0">전체</button>
+          </div>
         </div>
-        <div class="chart-legend">
-          <span
-            ><i class="sw" style="background: var(--inflow)"></i>외국인</span
-          >
-          <span><i class="sw" style="background: var(--alert)"></i>기관</span>
-          <span
-            ><i class="sw" style="background: var(--muted-2)"></i>지수
-            종가(우축)</span
-          >
-        </div>
-        <svg id="indexChart" preserveAspectRatio="none"></svg>
+        <div id="indexChart"></div>
         <div class="chart-note">
-          막대 = 외국인·기관 일일 순매수 거래대금 · 선 = 지수 종가 추이
+          막대 = 외국인·기관 일일 순매수 거래대금 · 선 = 지수 종가(우축)
         </div>
+        <div class="chart-hint" id="chartHint"></div>
       </div>
 
       <!-- SECTOR -->
@@ -986,6 +1009,14 @@
 
     <!-- OOS 정산 현황(window.EDGE). settle.js → publish.sh 가 생성. 없으면 줄을 숨긴다. -->
     <script src="edge.js"></script>
+
+    <!-- 시계열 원장(window.SERIES · 계약 §4.1). data.js 의 30일 창을 넘어선 이력.
+         없으면 차트는 계약의 30일만 그린다(graceful). -->
+    <script src="series.js"></script>
+
+    <!-- uPlot (MIT · vendor/uPlot.LICENSE). npm 아님 — 파일을 직접 두어 빌드 단계를
+         만들지 않고 file:// 동작을 유지한다(§6). 외부 요청 없음을 확인하고 넣었다. -->
+    <script src="vendor/uPlot.iife.min.js"></script>
 
     <script>
       /* =========================================================
@@ -1185,56 +1216,169 @@
           .join("");
       }
 
-      /* ---- 지수 차트 (다이버징 막대 + 종가 라인) ---- */
-      function renderChart() {
-        const svg = document.getElementById("indexChart");
-        const W = svg.clientWidth || 1100,
-          H = 260;
-        svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-        const d = DATA.index[curMkt];
-        const padT = 14,
-          padB = 22,
-          padL = 4,
-          padR = 4;
-        const plotH = H - padT - padB,
-          midY = padT + plotH / 2;
-        const n = d.foreign.length;
-        const bw = (W - padL - padR) / n;
-        const allBars = [...d.foreign, ...d.institution].map(Math.abs);
-        const maxBar = Math.max(...allBars) * 1.1;
-        const sc = (v) => (v / maxBar) * (plotH / 2);
-        const cmin = Math.min(...d.close),
-          cmax = Math.max(...d.close);
-        const cy = (v) =>
-          padT + plotH - ((v - cmin) / (cmax - cmin || 1)) * plotH;
+      /* ---- 지수 차트 (uPlot · 다이버징 막대 + 종가 라인) ----
+         손으로 짠 SVG 를 대체한다. 예전에는 값을 읽으려면 눈대중해야 했고 툴팁·줌·날짜축이
+         없었다. 30거래일이면 견딜 만했지만, 시계열 원장(§4.1)이 쌓이는 순간 끝나는 방식이다.
 
-        let svgInner = `<line x1="${padL}" y1="${midY}" x2="${W - padR}" y2="${midY}" stroke="var(--line-strong)" stroke-width="1"/>`;
-        for (let i = 0; i < n; i++) {
-          const x = padL + i * bw;
-          const fw = bw * 0.32,
-            gw = bw * 0.32,
-            gap = bw * 0.06;
-          // 외국인
-          const fv = d.foreign[i],
-            fh = sc(Math.abs(fv));
-          svgInner += `<rect x="${x + bw * 0.15}" y="${fv >= 0 ? midY - fh : midY}" width="${fw}" height="${fh}" rx="1.5" fill="var(--inflow)" opacity="${fv >= 0 ? 0.92 : 0.55}"/>`;
-          // 기관
-          const iv = d.institution[i],
-            ih = sc(Math.abs(iv));
-          svgInner += `<rect x="${x + bw * 0.15 + fw + gap}" y="${iv >= 0 ? midY - ih : midY}" width="${gw}" height="${ih}" rx="1.5" fill="var(--alert)" opacity="${iv >= 0 ? 0.85 : 0.5}"/>`;
+         x 를 '시간'이 아니라 '거래일 인덱스'로 둔다. 휴장일 간격을 그리지 않기 위함이다 —
+         거래일 막대는 균등 간격이어야 읽히고, 주말 빈칸은 정보가 아니라 잡음이다.
+         축 라벨에서만 인덱스를 날짜로 되돌린다. */
+      let uplot = null;
+      let chartDates = []; // 축·범례 포매터가 참조 (setData 로 갱신되므로 재생성 불필요)
+      let curRange = 30; // 0 = 전체
+
+      /* 시계열 합성: 원장(SERIES)을 깔고 그 위에 계약의 30일 창을 덮는다.
+         창이 언제나 가장 신선하므로, series.js 가 낡아도 화면이 틀리지 않는다.
+
+         단 합성 fallback 일 때는 원장을 아예 섞지 않는다(§1.5 합성/실데이터 경계).
+         series.js 는 진짜 수급이고 FALLBACK_SYNTHETIC 은 시연용이다. 둘이 한 차트에
+         섞이면 "합성 데이터" 배너가 그 자체로 거짓 진술이 된다 — 화면 절반이 실데이터인데. */
+      function indexSeries(mkt) {
+        const m = new Map();
+        const ledger =
+          USING_REAL && Array.isArray(window.SERIES) ? window.SERIES : [];
+        ledger.forEach((r) => {
+          const v = r.index && r.index[mkt];
+          if (v) m.set(r.date, [v.foreign, v.institution, v.close]);
+        });
+        const d = DATA.index[mkt];
+        d.dates.forEach((dt, k) =>
+          m.set(dt, [d.foreign[k], d.institution[k], d.close[k]]),
+        );
+        const dates = [...m.keys()].sort();
+        return {
+          dates: dates,
+          foreign: dates.map((x) => m.get(x)[0]),
+          institution: dates.map((x) => m.get(x)[1]),
+          close: dates.map((x) => m.get(x)[2]),
+        };
+      }
+
+      const cssVar = (n) =>
+        getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+      const mdY = (iso) => (iso || "").slice(5).replace("-", "/"); // 2026-08-14 → 08/14
+      const dateAt = (v) => chartDates[Math.round(v)] || "";
+
+      function chartHeight(w) {
+        // 모바일에서 260px 고정은 너무 납작하다. 가로에 비례시키되 상·하한을 둔다.
+        return Math.max(220, Math.min(320, Math.round(w * 0.34)));
+      }
+
+      function chartOpts(w) {
+        const inflow = cssVar("--inflow"),
+          alertC = cssVar("--alert"),
+          muted = cssVar("--muted"),
+          muted2 = cssVar("--muted-2"),
+          lineC = cssVar("--line");
+        const bars = uPlot.paths.bars;
+        return {
+          width: w,
+          height: chartHeight(w),
+          // padding 은 uPlot 기본값을 쓴다 — 축 여백 계산은 라이브러리가 축 size 와 함께
+          // 하므로, 눈으로 확인하지 않은 채 손대면 라벨이 잘리기 쉽다.
+          // 세로 드래그는 막는다 — 수급 차트에서 y 확대는 쓸 일이 없고 오조작만 부른다
+          cursor: { drag: { x: true, y: false }, y: false },
+          legend: { live: true },
+          scales: {
+            x: { time: false },
+            // 0 을 화면 정중앙에 고정 — 유입/유출을 대칭으로 읽는 기존 설계를 유지한다
+            flow: {
+              range: (u, min, max) => {
+                const m = Math.max(Math.abs(min), Math.abs(max)) * 1.1 || 1;
+                return [-m, m];
+              },
+            },
+          },
+          axes: [
+            {
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { show: false },
+              ticks: { stroke: lineC, size: 4 },
+              values: (u, splits) => splits.map((v) => mdY(dateAt(v))),
+            },
+            {
+              scale: "flow",
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { stroke: lineC, width: 1 },
+              ticks: { show: false },
+              size: 46,
+              values: (u, splits) =>
+                splits.map((v) =>
+                  Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "만" : v,
+                ),
+            },
+            {
+              scale: "close",
+              side: 1,
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { show: false },
+              ticks: { show: false },
+              size: 46,
+            },
+          ],
+          series: [
+            { label: "거래일", value: (u, v) => dateAt(v) || "—" },
+            {
+              label: "외국인",
+              scale: "flow",
+              stroke: inflow,
+              fill: inflow,
+              width: 0,
+              paths: bars({ size: [0.42], align: -1 }),
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+            {
+              label: "기관",
+              scale: "flow",
+              stroke: alertC,
+              fill: alertC,
+              width: 0,
+              paths: bars({ size: [0.42], align: 1 }),
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+            {
+              label: "종가",
+              scale: "close",
+              stroke: muted,
+              width: 1.4,
+              points: { show: false },
+              value: (u, v) => (v == null ? "—" : fmtP(v)),
+            },
+          ],
+        };
+      }
+
+      function applyRange(n) {
+        const from = curRange && n > curRange ? n - curRange : 0;
+        uplot.setScale("x", { min: from, max: Math.max(from, n - 1) });
+        const hint = document.getElementById("chartHint");
+        if (hint) {
+          const shown = n - from;
+          hint.innerHTML =
+            `<b>${shown}거래일</b> 표시 · 원장 누적 <b>${n}거래일</b>` +
+            `(${chartDates[0]} ~ ${chartDates[n - 1]}) · 드래그로 확대, 더블클릭으로 초기화`;
         }
-        // 종가 라인
-        let path = "";
-        for (let i = 0; i < n; i++) {
-          const x = padL + i * bw + bw / 2;
-          const y = cy(d.close[i]);
-          path +=
-            (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
-        }
-        svgInner += `<path d="${path}" fill="none" stroke="var(--muted)" stroke-width="1.4" opacity="0.65"/>`;
-        // 라벨: 좌측 0, 상하 max
-        svgInner += `<text x="${padL + 2}" y="${midY - 3}" fill="var(--muted-2)" font-size="9" font-family="IBM Plex Mono">0</text>`;
-        svg.innerHTML = svgInner;
+      }
+
+      function renderChart() {
+        const el = document.getElementById("indexChart");
+        if (!el || typeof uPlot === "undefined") return;
+        const s = indexSeries(curMkt);
+        chartDates = s.dates;
+        const n = s.dates.length;
+        const data = [
+          Array.from({ length: n }, (_, i) => i),
+          s.foreign,
+          s.institution,
+          s.close,
+        ];
+        const w = el.clientWidth || 900;
+        if (!uplot) uplot = new uPlot(chartOpts(w), data, el);
+        else uplot.setData(data);
+        applyRange(n);
       }
 
       /* ---- 섹터 종목 카드 ---- */
@@ -1579,7 +1723,30 @@
         curMkt = b.dataset.mkt;
         renderAll();
       });
-      window.addEventListener("resize", renderChart);
+      document.getElementById("rangeToggle").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        document
+          .querySelectorAll("#rangeToggle button")
+          .forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        curRange = Number(b.dataset.range);
+        if (uplot) applyRange(chartDates.length);
+      });
+      // 리사이즈는 데이터가 아니라 크기만 바뀐다 — setSize 로 충분하고 확대 상태도 보존된다.
+      // (예전 SVG 는 매번 전부 다시 그렸다)
+      let resizeTimer = null;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          const el = document.getElementById("indexChart");
+          if (uplot && el && el.clientWidth)
+            uplot.setSize({
+              width: el.clientWidth,
+              height: chartHeight(el.clientWidth),
+            });
+        }, 120);
+      });
     </script>
   </body>
 </html>

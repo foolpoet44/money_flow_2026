@@ -90,7 +90,13 @@ node   backtest/settle.js          # 원장 신호에 실현수익 결합·재�
 ```bash
 # 8월 KOSPI 외국인 수급만 뽑아보기
 cat docs/series/2026-08.jsonl | node -e 'require("readline").createInterface({input:process.stdin}).on("line",l=>{const r=JSON.parse(l);console.log(r.date, r.index.KOSPI.foreign)})'
+
+# 과거 백필 — docs/data.js 커밋 스냅샷에서 지수 수급을 복원 (멱등, 기존 행은 안 건드림)
+python collector/backfill_series.py           # 진단만
+python collector/backfill_series.py --write   # 실제 기입
 ```
+
+대시보드는 원장을 `series.js`(`window.SERIES`)로 읽어 지수 차트를 그린다. 차트는 [uPlot](https://github.com/leeoniya/uPlot)(MIT)을 `dashboard/vendor/`에 **직접 두어** 쓴다 — npm이 아니라 파일이므로 빌드 단계가 없고 `file://`에서 그대로 열린다. 드래그로 확대, 더블클릭으로 초기화, `30일 / 전체` 토글.
 
 > **첫 판정(2026-03~06, 60거래일):** 방향성 모드(신호대로 매수=롱·매도=숏)는 비용 차감 후 **전 구간 노이즈 또는 손실**이며, 최상위 "Critical" 등급이 10일 −9.1%(t=−2.04)로 **가장 나빴다.** Long-only가 양(+)으로 보이는 건 대부분 상승장 드리프트(기준선)와 겹치는 구간·표본부족 탓이다. **이 표본으로 "엣지 있음"을 주장할 수 없다.** 신호는 매매 트리거가 아니라 관찰 보조로만 쓰고, 라이브 원장으로 표본을 누적해 재판정할 것.
 

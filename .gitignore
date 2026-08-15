@@ -8,6 +8,8 @@
 /dashboard/research.js
 # edge.js 는 edge_status.json 파생물(publish.sh 가 생성) — 작업본은 커밋하지 않는다.
 /dashboard/edge.js
+# series.js 는 docs/series/*.jsonl(원장) 파생물 — 원장이 정본이라 작업본은 커밋하지 않는다.
+/dashboard/series.js
 # 다이제스트 캐시(봇이 읽는 최신 다이제스트)
 /scripts/last_digest.txt
 # 백테스트 데이터 산출물.

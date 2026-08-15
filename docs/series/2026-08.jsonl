@@ -1,0 +1,10 @@
+{"date": "2026-08-03", "index": {"KOSPI": {"foreign": -28220, "institution": -19516, "close": 6257}, "KOSDAQ": {"foreign": -2092, "institution": 1669, "close": 737}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-04", "index": {"KOSPI": {"foreign": -3716, "institution": -5385, "close": 6359}, "KOSDAQ": {"foreign": -2775, "institution": 5438, "close": 781}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-05", "index": {"KOSPI": {"foreign": 14464, "institution": -2838, "close": 6598}, "KOSDAQ": {"foreign": -2979, "institution": -1101, "close": 800}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-06", "index": {"KOSPI": {"foreign": -32893, "institution": -1214, "close": 6296}, "KOSDAQ": {"foreign": -2481, "institution": 1615, "close": 802}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-07", "index": {"KOSPI": {"foreign": -8651, "institution": 5854, "close": 6259}, "KOSDAQ": {"foreign": -2522, "institution": -1044, "close": 799}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-10", "index": {"KOSPI": {"foreign": -14909, "institution": 5692, "close": 6300}, "KOSDAQ": {"foreign": 1027, "institution": 5667, "close": 854}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-11", "index": {"KOSPI": {"foreign": 535, "institution": 212, "close": 6346}, "KOSDAQ": {"foreign": -3562, "institution": -954, "close": 858}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-12", "index": {"KOSPI": {"foreign": 28354, "institution": 5279, "close": 6579}, "KOSDAQ": {"foreign": -1623, "institution": -1459, "close": 859}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-13", "index": {"KOSPI": {"foreign": 21102, "institution": 6834, "close": 6813}, "KOSDAQ": {"foreign": -1362, "institution": -1132, "close": 861}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-08-14", "index": {"KOSPI": {"foreign": 30387, "institution": -10298, "close": 6978}, "KOSDAQ": {"foreign": -659, "institution": -2524, "close": 865}}, "stocks": {}, "source": "backfill:docs/data.js"}

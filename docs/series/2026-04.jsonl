@@ -1,0 +1,3 @@
+{"date": "2026-04-28", "index": {"KOSPI": {"foreign": -1843, "institution": 3532, "close": 6641}, "KOSDAQ": {"foreign": -4949, "institution": -2543, "close": 1216}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-04-29", "index": {"KOSPI": {"foreign": -6071, "institution": 4771, "close": 6691}, "KOSDAQ": {"foreign": -21, "institution": -729, "close": 1220}}, "stocks": {}, "source": "backfill:docs/data.js"}
+{"date": "2026-04-30", "index": {"KOSPI": {"foreign": -14559, "institution": 2838, "close": 6599}, "KOSDAQ": {"foreign": -2112, "institution": -3045, "close": 1192}}, "stocks": {}, "source": "backfill:docs/data.js"}

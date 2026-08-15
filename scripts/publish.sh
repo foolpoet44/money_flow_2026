@@ -15,13 +15,18 @@ if [ ! -f dashboard/data.js ]; then
   echo "⚠ dashboard/data.js 없음 — 발행본이 합성 데이터로 표시됩니다(collector를 먼저 실행 권장)"
 fi
 
-mkdir -p docs
+mkdir -p docs docs/vendor
 # 화면·엔진(소스) + 생성 데이터(발행본). docs/는 gitignore 대상이 아니므로 커밋된다.
 cp dashboard/index.html docs/index.html
 cp dashboard/signal_engine.js docs/signal_engine.js
 cp dashboard/research_digest.js docs/research_digest.js
+# 벤드링 라이브러리(uPlot). npm 이 아니라 파일이므로 발행본에도 그대로 복사한다.
+cp dashboard/vendor/* docs/vendor/
 [ -f dashboard/data.js ] && cp dashboard/data.js docs/data.js || true
 [ -f dashboard/research.js ] && cp dashboard/research.js docs/research.js || true
+# 시계열 원장 → 대시보드 입력(§4.1). 원장 자체는 docs/series/ 에 이미 누적돼 있고,
+# collector 가 그것을 series.js 로 굽는다. 여기서는 발행본으로 옮기기만 한다.
+[ -f dashboard/series.js ] && cp dashboard/series.js docs/series.js || true
 
 # OOS 정산 현황 → 방식 B(§6)로 화면에 노출. 그동안 edge_status.json 은 텔레그램에만 나갔고
 # 대시보드는 등급 A/B/C 만 자신 있게 보여줬다. "그 신호가 실제로 돈이 됐는가"를 같은 화면에 둔다.

@@ -323,6 +323,40 @@ def write_series(data, out_dir):
     return added
 
 
+def read_series(out_dir):
+    """원장 전체를 날짜 오름차순 리스트로 읽는다. 없으면 빈 리스트."""
+    rows = {}
+    if not os.path.isdir(out_dir):
+        return []
+    for fn in sorted(os.listdir(out_dir)):
+        if not fn.endswith(".jsonl"):
+            continue
+        with open(os.path.join(out_dir, fn), encoding="utf-8") as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                rows[r["date"]] = r
+    return [rows[d] for d in sorted(rows)]
+
+
+def write_series_js(out_dir, js_path):
+    """원장 → dashboard/series.js (window.SERIES). 방식 B(§6)와 같은 배선.
+
+    왜 JSONL 을 그대로 안 읽히나: 대시보드는 file:// 에서도 열려야 하고(§6), fetch 는
+    file:// 에서 막힌다. data.js·research.js 와 똑같이 <script src> 로 넘긴다.
+    indent 없이 쓴다 — 사람이 읽을 파일이 아니라 원장(JSONL)이 정본이다.
+    """
+    rows = read_series(out_dir)
+    with open(js_path, "w", encoding="utf-8") as fp:
+        fp.write("window.SERIES = " + json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + ";\n")
+    return len(rows)
+
+
 # ── 스키마 검증 (계약 §4 불변 규칙) ──────────────────
 def _validate(data, pending=None):
     """data.json이 계약을 만족하는지 최소 검증. 실패 시 예외로 중단."""
@@ -455,7 +489,8 @@ def main():
     # (스냅샷이 아니라 누적물이라 dashboard/ → docs/ 복사 경로를 타지 않는다)
     series_dir = os.path.join(root, "docs", "series")
     added = write_series(data, series_dir)
-    print(f"✓ 시계열 원장 갱신 · docs/series/ · 신규 거래일 {added}일")
+    n = write_series_js(series_dir, os.path.join(root, "dashboard", "series.js"))
+    print(f"✓ 시계열 원장 갱신 · docs/series/ · 신규 거래일 {added}일 · 누적 {n}일 → dashboard/series.js")
 
 
 if __name__ == "__main__":

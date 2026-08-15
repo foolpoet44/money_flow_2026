@@ -60,6 +60,7 @@ money-flow/
 ├── universe.json             # 추적 종목 단일 출처 (collector·research·backtest·settle 공용)
 ├── .prettierignore           # 생성물 포맷 금지 (포매터 ↔ collector 왕복 diff 차단)
 ├── docs/series/YYYY-MM.jsonl # 거래일별 append-only 시계열 원장 (§4.1)
+├── dashboard/vendor/         # uPlot (MIT · 벤드링). npm 아님 — 빌드 단계 없음, file:// 유지
 ├── collector/
 │   ├── collector.py          # [시드] pykrx 수집기
 │   ├── requirements.txt       # pykrx, pandas
@@ -155,6 +156,14 @@ money-flow/
   누적물이므로 `dashboard/ → docs/` 복사 경로를 타지 않는다.
 - 테스트는 이 원장에 절대 쓰지 않는다(`replay.test.py`가 `write_series`를 스텁으로 막는다).
   upsert 로직 자체는 `guard.test.py`가 임시 디렉터리에서 못박는다.
+- 대시보드 입력은 `series.js`(`window.SERIES`)다 — 방식 B(§6) 동일. 원장(JSONL)이 정본이고
+  `series.js`는 파생물이므로 작업본은 gitignore, 발행본만 커밋한다.
+- **과거 백필**(`collector/backfill_series.py`): `docs/data.js` 커밋 스냅샷을 되짚어 원장을
+  과거로 늘린다. 규칙 셋 — ① 마감(15:40 KST) 이후 관측만 신뢰 ② 관측이 갈리면 다수결
+  ③ **지수만**. 2026-08-07 이전 종목 시계열은 정렬 어긋남으로 격리된 구간이므로
+  다른 파일에 되살리지 않는다(격리해 놓고 뒷문으로 들이면 격리가 아니다).
+  백필 행에는 `"source": "backfill:docs/data.js"` 표식이 붙고 `stocks`가 비어 있다.
+  기존 행은 절대 덮지 않는다 — 실수집이 언제나 이긴다.
 
 ---
 
