@@ -8,6 +8,11 @@
 # 발행본 전체 (publish.sh 가 만든다)
 docs/
 
+# 벤드링 라이브러리 — 남의 코드다. 포매터가 손댈 이유가 없고, 실제로 손댔다:
+# uPlot.iife.min.js 가 49.9KB 1줄에서 105KB 3,465줄로 펼쳐져 커밋됐다.
+# 동작은 같지만 방문자마다 2배 페이로드를 받고, 파일명이 .min.js 인데 미니파이가 아니게 된다.
+dashboard/vendor/
+
 # collector 산출물 (작업본)
 data.json
 research.json
