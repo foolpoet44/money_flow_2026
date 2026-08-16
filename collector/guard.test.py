@@ -138,7 +138,8 @@ def _mini(dates, kospi_foreign, samsung_foreign):
             for m in C.MARKETS
         },
         "sector": {"stocks": [{"ticker": "005930", "foreign": samsung_foreign,
-                               "institution": [0] * n, "fhold": [5310] * n}]},
+                               "institution": [0] * n, "fhold": [5310] * n,
+                               "close": [71000 + i for i in range(n)]}]},
     }
 
 
@@ -168,12 +169,17 @@ try:
     check("8월이 날짜 오름차순", [r["date"] for r in aug], ["2026-08-03", "2026-08-04"])
     check("겹친 날은 최신 확정값으로 갱신", rows("2026-07")[1]["index"]["KOSPI"]["foreign"], 99)
 
-    # fhold 는 계약상 비어 있을 수 있다 — 그때는 키를 넣지 않는다
-    empty_fhold = _mini(["2026-08-05"], [1], [1])
-    empty_fhold["sector"]["stocks"][0]["fhold"] = []
-    C.write_series(empty_fhold, tmp)
-    check("fhold 빈 배열이면 키 없음",
-          "fhold" in rows("2026-08")[-1]["stocks"]["005930"], False)
+    # 종가가 원장에 실리는가 — 수급만 있고 결과가 없던 상태를 끝내는 필드
+    check("종목 close 가 원장에 실린다", rows("2026-07")[0]["stocks"]["005930"]["close"], 71000)
+
+    # fhold·close 는 없을 수 있다(계약 허용/구버전) — 그때는 키를 넣지 않는다
+    empty = _mini(["2026-08-05"], [1], [1])
+    empty["sector"]["stocks"][0]["fhold"] = []
+    empty["sector"]["stocks"][0]["close"] = []
+    C.write_series(empty, tmp)
+    last = rows("2026-08")[-1]["stocks"]["005930"]
+    check("fhold 빈 배열이면 키 없음", "fhold" in last, False)
+    check("close 빈 배열이면 키 없음", "close" in last, False)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

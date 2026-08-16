@@ -205,6 +205,9 @@ def stock_rows(ticker, pending=None):
             "foreign": round(_signed_int(r.get("foreignerPureBuyQuant", 0)) * close_won / EOK),
             "institution": round(_signed_int(r.get("organPureBuyQuant", 0)) * close_won / EOK),
             "fhold": _ratio_x100(r.get("foreignerHoldRatio", "0%")),
+            # 종가(원). 예전엔 억원 환산에만 쓰고 버렸다 — 그래서 대시보드가 수급은 보여주면서
+            # "그래서 올랐나"에는 답하지 못했다. 이미 매일 받는 값이라 추가 호출은 없다.
+            "close": round(close_won),
         }
     if not out and undated:
         return {}, True
@@ -223,13 +226,14 @@ def stock_rows_legacy(ticker, pending=None, index_dropped=False):
     rows = rows[-N_TRADING_DAYS:]
     if len(rows) < N_TRADING_DAYS:
         raise RuntimeError(f"{ticker}: 거래일 {len(rows)}개 < {N_TRADING_DAYS}개 — pageSize 상향 필요")
-    foreign, institution, fhold = [], [], []
+    foreign, institution, fhold, close = [], [], [], []
     for r in rows:
         close_won = _num(r["closePrice"])
         foreign.append(round(_signed_int(r.get("foreignerPureBuyQuant", 0)) * close_won / EOK))
         institution.append(round(_signed_int(r.get("organPureBuyQuant", 0)) * close_won / EOK))
         fhold.append(_ratio_x100(r.get("foreignerHoldRatio", "0%")))
-    return {"foreign": foreign, "institution": institution, "fhold": fhold}
+        close.append(round(close_won))
+    return {"foreign": foreign, "institution": institution, "fhold": fhold, "close": close}
 
 
 # ── 공통 창 결정 ─────────────────────────────────────
@@ -269,8 +273,9 @@ def series_rows(data):
             "stocks": {
                 s["ticker"]: dict(
                     {"foreign": s["foreign"][i], "institution": s["institution"][i]},
-                    # fhold 는 계약상 비어 있을 수 있다 — 없으면 키 자체를 안 넣는다.
-                    **({"fhold": s["fhold"][i]} if s["fhold"] else {}),
+                    # fhold·close 는 없을 수 있다(계약 허용/구버전) — 없으면 키 자체를 안 넣는다.
+                    **({"fhold": s["fhold"][i]} if s.get("fhold") else {}),
+                    **({"close": s["close"][i]} if s.get("close") else {}),
                 )
                 for s in stocks
             },
@@ -384,9 +389,12 @@ def _validate(data, pending=None):
     if len(stocks) != len(SECTOR):
         errs.append(f"sector.stocks 수 {len(stocks)} ≠ {len(SECTOR)}")
     for s in stocks:
-        for key in ("foreign", "institution"):
-            if len(s[key]) != N_TRADING_DAYS:
-                errs.append(f"{s['name']}.{key} 길이 {len(s[key])} ≠ {N_TRADING_DAYS}")
+        for key in ("foreign", "institution", "close"):
+            if len(s.get(key, [])) != N_TRADING_DAYS:
+                errs.append(f"{s['name']}.{key} 길이 {len(s.get(key, []))} ≠ {N_TRADING_DAYS}")
+        # 종가는 양수여야 한다 — 0/음수는 파싱 실패의 신호다(수익률 계산이 조용히 망가진다)
+        if any(c <= 0 for c in s.get("close", [])):
+            errs.append(f"{s['name']}.close 에 0 이하 값 — 종가 파싱 실패 의심")
         # fhold는 비어 있을 수 있다(계약 허용). 있으면 길이만 본다.
         if s["fhold"] and len(s["fhold"]) != N_TRADING_DAYS:
             errs.append(f"{s['name']}.fhold 길이 {len(s['fhold'])} ≠ {N_TRADING_DAYS}")
@@ -453,6 +461,7 @@ def main():
                 "foreign": [m[d]["foreign"] for d in window],
                 "institution": [m[d]["institution"] for d in window],
                 "fhold": [m[d]["fhold"] for d in window],
+                "close": [m[d]["close"] for d in window],
             }
         stocks.append({"ticker": tk, "name": nm, **sf})
 

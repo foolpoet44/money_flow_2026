@@ -532,6 +532,21 @@
         font-weight: 600;
       }
 
+      /* 리서치 추출 계측 — 품질이 조용히 낮아지는 것을 막으려면 품질을 보여야 한다 */
+      .rd-enrich {
+        margin-top: 10px;
+        padding-top: 9px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+        color: var(--muted-2);
+      }
+      .rd-enrich.warn {
+        color: var(--alert);
+      }
+      .rd-enrich b {
+        font-weight: 600;
+      }
+
       /* ---------- 신호 이력 (OOS 원장) ---------- */
       .ledger {
         background: var(--panel);
@@ -700,6 +715,25 @@
       .stock .stat .v {
         font-size: 14px;
         font-weight: 600;
+      }
+      /* 주가 30일은 두 칸을 쓴다 — 수급 옆에 결과가 나란히 놓이는 게 이 카드의 요점이다 */
+      .stock .stat.span2 {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--line);
+        padding-top: 9px;
+      }
+      /* 보조 수치(z·%p) — 본값보다 작고 흐리게, 색은 상속하되 in/out 이면 덮어쓴다 */
+      .stock .stat .zi {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted-2);
+        margin-left: 3px;
+      }
+      .stock .stat .zi.in {
+        color: var(--inflow);
+      }
+      .stock .stat .zi.out {
+        color: var(--outflow);
       }
       .stock .stat .v.in {
         color: var(--inflow);
@@ -1050,6 +1084,10 @@
             <button class="on" data-mkt="KOSPI">KOSPI</button>
             <button data-mkt="KOSDAQ">KOSDAQ</button>
           </div>
+          <div class="toggle" id="modeToggle">
+            <button class="on" data-mode="daily">일별</button>
+            <button data-mode="cum">누적</button>
+          </div>
           <div class="toggle" id="rangeToggle">
             <button class="on" data-range="30">30일</button>
             <button data-range="0">전체</button>
@@ -1340,6 +1378,7 @@
       let uplot = null;
       let chartDates = []; // 축·범례 포매터가 참조 (setData 로 갱신되므로 재생성 불필요)
       let curRange = 30; // 0 = 전체
+      let curMode = "daily"; // daily = 일별 막대+종가 | cum = 두 시장 누적선
 
       /* 시계열 합성: 원장(SERIES)을 깔고 그 위에 계약의 30일 창을 덮는다.
          창이 언제나 가장 신선하므로, series.js 가 낡아도 화면이 틀리지 않는다.
@@ -1376,6 +1415,62 @@
       function chartHeight(w) {
         // 모바일에서 260px 고정은 너무 납작하다. 가로에 비례시키되 상·하한을 둔다.
         return Math.max(220, Math.min(320, Math.round(w * 0.34)));
+      }
+
+      /* 누적 모드 옵션 — 일별 막대는 추세를 못 보여준다. 누적선이 곧 '조류'다.
+         실측: KOSPI 외국인 누적이 74거래일 동안 +37,920 → −1,135,684억 으로 흘렀는데,
+         화면은 그동안 매일 막대 하나만 보여줬다.
+         이 모드에서는 시장 토글을 무시하고 KOSPI·KOSDAQ 을 함께 그린다 — 대형↔중소형
+         자금 이동은 두 지수를 나란히 놓아야만 보이고, 그 데이터는 이미 갖고 있다. */
+      function chartOptsCum(w) {
+        const inflow = cssVar("--inflow"),
+          outflow = cssVar("--outflow"),
+          muted2 = cssVar("--muted-2"),
+          lineC = cssVar("--line");
+        const axisFont = '10px "IBM Plex Mono", monospace';
+        const eok = (v) =>
+          Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : v;
+        return {
+          width: w,
+          height: chartHeight(w),
+          cursor: { drag: { x: true, y: false }, y: false },
+          legend: { live: true },
+          scales: { x: { time: false } },
+          axes: [
+            {
+              stroke: muted2,
+              font: axisFont,
+              grid: { show: false },
+              ticks: { stroke: lineC, size: 4 },
+              values: (u, splits) => splits.map((v) => mdY(dateAt(v))),
+            },
+            {
+              stroke: muted2,
+              font: axisFont,
+              grid: { stroke: lineC, width: 1 },
+              ticks: { show: false },
+              size: 52,
+              values: (u, splits) => splits.map(eok),
+            },
+          ],
+          series: [
+            { label: "거래일", value: (u, v) => dateAt(v) || "—" },
+            {
+              label: "KOSPI 외국인 누적",
+              stroke: inflow,
+              width: 1.8,
+              points: { show: false },
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+            {
+              label: "KOSDAQ 외국인 누적",
+              stroke: outflow,
+              width: 1.8,
+              points: { show: false },
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+          ],
+        };
       }
 
       function chartOpts(w) {
@@ -1477,22 +1572,48 @@
         }
       }
 
+      const runningSum = (arr) => {
+        let c = 0;
+        return arr.map((v) => (c += v));
+      };
+
       function renderChart() {
         const el = document.getElementById("indexChart");
         if (!el || typeof uPlot === "undefined") return;
-        const s = indexSeries(curMkt);
-        chartDates = s.dates;
-        const n = s.dates.length;
-        const data = [
-          Array.from({ length: n }, (_, i) => i),
-          s.foreign,
-          s.institution,
-          s.close,
-        ];
         const w = el.clientWidth || 900;
-        if (!uplot) uplot = new uPlot(chartOpts(w), data, el);
-        else uplot.setData(data);
-        applyRange(n);
+        let data, opts;
+
+        if (curMode === "cum") {
+          // 두 시장을 같은 날짜축에 놓아야 하므로 KOSPI 날짜를 기준으로 맞춘다.
+          const kp = indexSeries("KOSPI"),
+            kq = indexSeries("KOSDAQ");
+          const qByDate = new Map(kq.dates.map((d, i) => [d, kq.foreign[i]]));
+          chartDates = kp.dates;
+          data = [
+            kp.dates.map((_, i) => i),
+            runningSum(kp.foreign),
+            runningSum(kp.dates.map((d) => qByDate.get(d) ?? 0)),
+          ];
+          opts = chartOptsCum(w);
+        } else {
+          const s = indexSeries(curMkt);
+          chartDates = s.dates;
+          data = [s.dates.map((_, i) => i), s.foreign, s.institution, s.close];
+          opts = chartOpts(w);
+        }
+
+        // 모드가 바뀌면 시리즈 구성 자체가 달라지므로 재생성한다(setData 로는 못 바꾼다).
+        if (uplot && uplot._mode !== curMode) {
+          uplot.destroy();
+          uplot = null;
+        }
+        if (!uplot) {
+          uplot = new uPlot(opts, data, el);
+          uplot._mode = curMode;
+        } else {
+          uplot.setData(data);
+        }
+        applyRange(chartDates.length);
       }
 
       /* ---- 섹터 종목 카드 ---- */
@@ -1511,6 +1632,13 @@
         });
         return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${inner}</svg>`;
       }
+      // 부호 있는 소수 표기. fmt() 는 Math.round 를 하므로 1 미만 값이 전부 0 이 된다.
+      // 외인지분율 변화는 대부분 1%p 미만이라 이 반올림이 지표를 통째로 지워 왔다
+      // (실측: 5종목 중 2개가 "+0%p" 로 표시 — 실제로는 +0.07%p, +0.36%p).
+      function fmtF(n, digits) {
+        return (n >= 0 ? "+" : "−") + Math.abs(n).toFixed(digits);
+      }
+
       function renderSector() {
         document.getElementById("sectorGrid").innerHTML = DATA.sector.stocks
           .map((s) => {
@@ -1519,7 +1647,18 @@
             const f5 = s.foreign.slice(-5).reduce((a, b) => a + b, 0);
             // fhold는 계약상 빈 배열일 수 있다(수집 실패 등) → 그때는 변화량을 null로 둔다
             const hasFhold = Array.isArray(s.fhold) && s.fhold.length > 0;
-            const fholdChg = hasFhold ? s.fhold[N - 1] - s.fhold[0] : null;
+            const fholdChg = hasFhold
+              ? (s.fhold[N - 1] - s.fhold[0]) / 100
+              : null;
+            const fholdNow = hasFhold ? s.fhold[N - 1] / 100 : null;
+            // 종가는 2026-08-17 부터 계약에 담긴다 — 구버전 data.js 는 없을 수 있다(graceful)
+            const hasClose = Array.isArray(s.close) && s.close.length === N;
+            const ret = hasClose
+              ? 100 * (s.close[N - 1] / s.close[0] - 1)
+              : null;
+            // 기관 z 는 그동안 계산조차 안 했다. 신호 규칙(§5)은 그대로 두고 표시만 한다.
+            const zf = zlast(s.foreign),
+              zi = zlast(s.institution);
             const netIn = f + i >= 0;
             return `<div class="stock">
       <div class="sh">
@@ -1531,27 +1670,75 @@
       </div>
       ${spark(s.foreign)}
       <div class="stats">
-        <div class="stat"><span class="k">외국인 오늘</span><span class="v ${f >= 0 ? "in" : "out"} mono">${fmt(f)}억</span></div>
-        <div class="stat"><span class="k">기관 오늘</span><span class="v ${i >= 0 ? "in" : "out"} mono">${fmt(i)}억</span></div>
+        <div class="stat"><span class="k">외국인 오늘</span><span class="v ${f >= 0 ? "in" : "out"} mono">${fmt(f)}억 <span class="zi">z${fmtF(zf, 1)}</span></span></div>
+        <div class="stat"><span class="k">기관 오늘</span><span class="v ${i >= 0 ? "in" : "out"} mono">${fmt(i)}억 <span class="zi">z${fmtF(zi, 1)}</span></span></div>
         <div class="stat"><span class="k">외국인 5일 누적</span><span class="v ${f5 >= 0 ? "in" : "out"} mono">${fmt(f5)}억</span></div>
-        <div class="stat"><span class="k">외인지분 30일</span><span class="v ${fholdChg === null ? "" : fholdChg >= 0 ? "in" : "out"} mono">${fholdChg === null ? "—" : fmt(fholdChg / 100) + "%p"}</span></div>
+        <div class="stat"><span class="k">외인지분율</span><span class="v mono">${
+          fholdNow === null
+            ? "—"
+            : fholdNow.toFixed(2) +
+              `% <span class="zi ${fholdChg >= 0 ? "in" : "out"}">${fmtF(fholdChg, 2)}%p</span>`
+        }</span></div>
+        <div class="stat span2"><span class="k">주가 30일</span><span class="v ${ret === null ? "" : ret >= 0 ? "in" : "out"} mono">${
+          ret === null
+            ? "— (종가 축적 중)"
+            : fmtF(ret, 1) + "% · " + s.close[N - 1].toLocaleString() + "원"
+        }</span></div>
       </div>
     </div>`;
           })
           .join("");
       }
 
-      /* ---- 검증 노트 ---- */
+      /* ---- 검증 노트 ----
+         예전에는 '반도체 섹터 vs KOSPI 전체'의 부호가 같은지를 보고 "동조하면 신뢰도 상승"
+         이라고 말했다. 그런데 원장으로 재보니 30거래일 중 28일(93%)이 일치한다 — 정렬이
+         거의 항상 일어나므로 신뢰 가산의 근거가 되지 못한다. 항진명제였다.
+         이유는 구조적이다: 이 5종목이 KOSPI 외국인 흐름의 0.5~1.0배를 차지한다.
+         섹터를 지수와 비교하는 것은 같은 지표를 두 번 보는 일이었다.
+
+         → 비교 대상을 '나머지 시장'(KOSPI 전체 − 섹터)으로 바꾼다. 뺄셈 하나로 얻어지고,
+           같은 30거래일에서 일치율이 63%다 — 37%는 갈린다. 그래야 정보다. */
+      function restOfMarket(dayIdx) {
+        const k = DATA.index.KOSPI;
+        const sec = DATA.sector.stocks.reduce(
+          (a, s) => a + s.foreign[dayIdx],
+          0,
+        );
+        return { sector: sec, rest: k.foreign[dayIdx] - sec };
+      }
+
       function renderVerify() {
-        const k = DATA.index.KOSPI,
-          sem = DATA.sector.stocks;
-        const kNet = k.foreign[N - 1] + k.institution[N - 1];
-        const semForeign = sem.reduce((a, s) => a + s.foreign[N - 1], 0);
-        const aligned = Math.sign(kNet) === Math.sign(semForeign);
+        const { sector, rest } = restOfMarket(N - 1);
+        const aligned = Math.sign(sector) === Math.sign(rest) && sector !== 0;
+
+        // 같은 계산을 원장 전체에 돌려 "이 검증이 얼마나 자주 갈리는지"를 함께 보여준다.
+        // 검증 장치 자신의 변별력을 숨기지 않는다.
+        let hist = "";
+        const L =
+          USING_REAL && Array.isArray(window.SERIES) ? window.SERIES : [];
+        const rows = L.filter((r) => Object.keys(r.stocks || {}).length);
+        if (rows.length >= 10) {
+          const agree = rows.filter((r) => {
+            const sec = Object.values(r.stocks).reduce(
+              (a, x) => a + x.foreign,
+              0,
+            );
+            return Math.sign(sec) === Math.sign(r.index.KOSPI.foreign - sec);
+          }).length;
+          hist = ` 원장 ${rows.length}거래일 중 <b>${agree}일(${Math.round((100 * agree) / rows.length)}%)</b>이 동조했습니다 — 갈리는 날이 있어야 정렬이 정보가 됩니다.`;
+        }
+
         document.getElementById("verifyNote").innerHTML = `
     <h4>단일 지표를 믿지 않는다 — 교차 확인 로그</h4>
-    <p>오늘 KOSPI 지수 순매수 ${fmt(kNet)}억과 반도체 섹터 외국인 합산 ${fmt(semForeign)}억이
-    ${aligned ? '<b style="color:var(--inflow)">같은 방향</b>으로 정렬됩니다. 지수와 주력 섹터가 동조할 때 신호 신뢰도가 상승합니다' : '<b style="color:var(--alert)">반대 방향</b>으로 갈립니다. 지수 전체와 섹터 흐름이 갈릴 때는 등급을 한 단계 보수적으로 봅니다'}.</p>
+    <p>오늘 반도체 섹터 외국인 <b>${fmt(sector)}억</b>과 <b>나머지 시장</b>(KOSPI 전체 − 섹터) 외국인 <b>${fmt(rest)}억</b>이
+    ${
+      aligned
+        ? '<b style="color:var(--inflow)">같은 방향</b>입니다. 섹터와 시장 전반이 함께 움직이면 종목 신호를 시장 전체의 흐름으로 읽습니다'
+        : '<b style="color:var(--alert)">갈립니다</b>. 섹터만 따로 움직일 때는 업종 고유 재료일 가능성이 크므로 지수 신호로 일반화하지 않습니다'
+    }.${hist}</p>
+    <p>비교 대상을 지수 <em>전체</em>가 아니라 <em>나머지 시장</em>으로 두는 이유: 이 5종목이 KOSPI 외국인 흐름의 대부분을 차지해,
+    섹터와 지수를 맞대면 부호가 거의 항상 일치합니다(측정값 93%). 같은 지표를 두 번 보는 셈이라 교차 확인이 되지 않습니다.</p>
     <p>판정 기준은 횡단면(남들 대비)이 아니라 각 지표 자신의 30거래일 시계열 분포입니다 — ergodicity 관점에서, 흐름의 비정상성은 "그 자산 자신의 역사"에 대해서만 정의됩니다.</p>`;
       }
 
@@ -1714,10 +1901,29 @@
                 ", ",
               )}</b>에 대한 리포트가 함께 나왔습니다 — 사실(수급)과 해석(리서치)이 겹치는 1순위 정독 지점입니다.`
           : `오늘은 수급 신호 종목과 직접 겹치는 리포트가 없어, 시황·산업 리포트로 큰 그림을 읽습니다.`;
+        /* 추출 성공률을 화면에 낸다.
+           research.json 은 enrich 계측치를 매일 담아 왔지만 아무도 볼 수 없었다.
+           실측: 목표가 0/15, 투자의견 0/15 가 10회 연속 — §11.1 이 계약한 필드가 죽어
+           있는데 그 사실이 화면에도, 로그에도(요약 비율만 경고) 드러나지 않았다.
+           품질이 조용히 낮아지는 것을 막는 유일한 방법은 품질을 표시하는 것이다. */
+        const en = R.enrich;
+        let enrichLine = "";
+        if (en && en.attempted) {
+          const dead = [];
+          if (!en.target) dead.push("목표가");
+          if (!en.opinion) dead.push("투자의견");
+          const rate = (v) => `${v}/${en.attempted}`;
+          enrichLine = `<div class="rd-enrich${dead.length ? " warn" : ""}">
+        본문 추출 ${rate(en.summary)} · 목표가 ${rate(en.target)} · 투자의견 ${rate(en.opinion)}
+        ${dead.length ? `— <b>${dead.join("·")} 추출이 작동하지 않습니다</b> (네이버 상세 페이지 구조 변경 의심)` : ""}
+      </div>`;
+        }
+
         const synth = `<div class="rd-synth">
       <h4>오늘의 종합 · ${esc(R.as_of)}</h4>
       <div class="lead">총 <b>${digest.total}건</b>의 리포트 (${catStr}). 리포트 톤은 <span class="rd-tone ${toneCls}">${digest.tone.label}</span> (긍정 ${digest.tone.bull} · 부정 ${digest.tone.bear} 키워드 기준 근사). ${flow}</div>
       ${chips ? `<div class="rd-chips">${chips}</div>` : ""}
+      ${enrichLine}
     </div>`;
 
         // ② 정독 추천 (설명 가능한 점수 + 이유)
@@ -1922,6 +2128,19 @@
         b.classList.add("on");
         curMkt = b.dataset.mkt;
         renderAll();
+      });
+      document.getElementById("modeToggle").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        document
+          .querySelectorAll("#modeToggle button")
+          .forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        curMode = b.dataset.mode;
+        // 누적 모드는 두 시장을 함께 그리므로 시장 토글이 의미를 잃는다 — 흐리게 둔다
+        document.getElementById("mktToggle").style.opacity =
+          curMode === "cum" ? "0.35" : "";
+        renderChart();
       });
       document.getElementById("rangeToggle").addEventListener("click", (e) => {
         const b = e.target.closest("button");
