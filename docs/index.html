@@ -16,6 +16,8 @@
       crossorigin
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
     />
+    <!-- uPlot 기본 스타일(로컬 벤드링). 다크 오버라이드는 아래 <style> 에 있다. -->
+    <link rel="stylesheet" href="vendor/uPlot.min.css" />
     <style>
       :root {
         --ink: #0b1115;
@@ -477,22 +479,142 @@
         color: var(--bone);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
       }
-      .chart-legend {
-        display: flex;
-        gap: 16px;
-        font-size: 11px;
-        color: var(--muted);
-        margin: 14px 0 6px;
-      }
+      /* ---------- uPlot 다크 테마 오버라이드 ----------
+         uPlot 기본 스타일은 라이트다. 축·격자 색은 JS opts 로(캔버스에 그려지므로),
+         범례·커서·드래그 선택 영역은 DOM 이라 여기서 맞춘다. */
       #indexChart {
         width: 100%;
-        height: 260px;
-        display: block;
+        min-height: 300px;
+      }
+      #indexChart .u-legend {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      #indexChart .u-legend .u-marker {
+        border-radius: 2px;
+      }
+      #indexChart .u-legend .u-value {
+        font-family: "IBM Plex Mono", monospace;
+        color: var(--bone);
+      }
+      #indexChart .u-legend th {
+        font-weight: 600;
+      }
+      #indexChart .u-select {
+        background: rgba(236, 231, 218, 0.07);
+      }
+      #indexChart .u-cursor-x,
+      #indexChart .u-cursor-y {
+        border-color: var(--line-strong) !important;
       }
       .chart-note {
         font-size: 11px;
         color: var(--muted-2);
         margin-top: 8px;
+      }
+      .chart-hint {
+        font-size: 11px;
+        color: var(--muted-2);
+        margin-top: 6px;
+      }
+      .chart-hint b {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      /* ---------- 신호 이력 (OOS 원장) ---------- */
+      .ledger {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 20px;
+      }
+      .lg-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        margin-bottom: 14px;
+      }
+      .lg-head .t {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .lg-head .sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .lg-strip {
+        display: flex;
+        gap: 2px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .lg-day {
+        width: 11px;
+        height: 24px;
+        border-radius: 2px;
+        background: var(--line);
+      }
+      .lg-day.watch {
+        background: var(--watch);
+      }
+      .lg-day.alert {
+        background: var(--alert);
+      }
+      .lg-day.critical {
+        background: var(--critical);
+      }
+      /* 격리 구간은 '있었지만 증거로 안 쓴다'를 시각적으로 말한다 — 지우지 않고 흐린다 */
+      .lg-day.quar {
+        opacity: 0.22;
+      }
+      .lg-legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 16px;
+      }
+      .lg-legend i {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        margin-right: 5px;
+        vertical-align: baseline;
+      }
+      .lg-row {
+        display: grid;
+        grid-template-columns: 84px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 0;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .lg-row .d {
+        color: var(--muted);
+      }
+      .lg-row .z {
+        color: var(--muted);
+      }
+      .lg-none {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 10px 0;
+      }
+      @media (max-width: 560px) {
+        .lg-row {
+          grid-template-columns: 72px 1fr;
+        }
+        .lg-row .z {
+          grid-column: 2;
+          text-align: right;
+        }
       }
 
       /* ---------- sector grid ---------- */
@@ -851,8 +973,7 @@
           </div>
           <div class="item">
             <span class="pill"
-              ><span class="dot"></span
-              ><span id="mktStatus">—</span></span
+              ><span class="dot"></span><span id="mktStatus">—</span></span
             >
           </div>
         </div>
@@ -920,21 +1041,16 @@
             <button class="on" data-mkt="KOSPI">KOSPI</button>
             <button data-mkt="KOSDAQ">KOSDAQ</button>
           </div>
+          <div class="toggle" id="rangeToggle">
+            <button class="on" data-range="30">30일</button>
+            <button data-range="0">전체</button>
+          </div>
         </div>
-        <div class="chart-legend">
-          <span
-            ><i class="sw" style="background: var(--inflow)"></i>외국인</span
-          >
-          <span><i class="sw" style="background: var(--alert)"></i>기관</span>
-          <span
-            ><i class="sw" style="background: var(--muted-2)"></i>지수
-            종가(우축)</span
-          >
-        </div>
-        <svg id="indexChart" preserveAspectRatio="none"></svg>
+        <div id="indexChart"></div>
         <div class="chart-note">
-          막대 = 외국인·기관 일일 순매수 거래대금 · 선 = 지수 종가 추이
+          막대 = 외국인·기관 일일 순매수 거래대금 · 선 = 지수 종가(우축)
         </div>
+        <div class="chart-hint" id="chartHint"></div>
       </div>
 
       <!-- SECTOR -->
@@ -952,6 +1068,14 @@
         <div class="rule"></div>
       </div>
       <div class="verify" id="verifyNote"></div>
+
+      <!-- 신호 이력 · OOS 원장 (window.LEDGER 없으면 섹션 전체 숨김) -->
+      <div class="eyebrow" id="ledgerEyebrow" style="display: none">
+        <span class="num">LG</span>
+        <h2>신호 이력 · OOS 원장</h2>
+        <div class="rule"></div>
+      </div>
+      <div id="ledgerBox"></div>
 
       <!-- RESEARCH DIGEST (별도 모듈 · window.RESEARCH 없으면 숨김) -->
       <div class="eyebrow" id="researchEyebrow" style="display: none">
@@ -987,6 +1111,17 @@
 
     <!-- OOS 정산 현황(window.EDGE). settle.js → publish.sh 가 생성. 없으면 줄을 숨긴다. -->
     <script src="edge.js"></script>
+
+    <!-- 시계열 원장(window.SERIES · 계약 §4.1). data.js 의 30일 창을 넘어선 이력.
+         없으면 차트는 계약의 30일만 그린다(graceful). -->
+    <script src="series.js"></script>
+
+    <!-- OOS 원장(window.LEDGER). publish.sh 가 ledger.jsonl 에서 굽는다. 없으면 섹션 숨김. -->
+    <script src="ledger.js"></script>
+
+    <!-- uPlot (MIT · vendor/uPlot.LICENSE). npm 아님 — 파일을 직접 두어 빌드 단계를
+         만들지 않고 file:// 동작을 유지한다(§6). 외부 요청 없음을 확인하고 넣었다. -->
+    <script src="vendor/uPlot.iife.min.js"></script>
 
     <script>
       /* =========================================================
@@ -1186,56 +1321,169 @@
           .join("");
       }
 
-      /* ---- 지수 차트 (다이버징 막대 + 종가 라인) ---- */
-      function renderChart() {
-        const svg = document.getElementById("indexChart");
-        const W = svg.clientWidth || 1100,
-          H = 260;
-        svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-        const d = DATA.index[curMkt];
-        const padT = 14,
-          padB = 22,
-          padL = 4,
-          padR = 4;
-        const plotH = H - padT - padB,
-          midY = padT + plotH / 2;
-        const n = d.foreign.length;
-        const bw = (W - padL - padR) / n;
-        const allBars = [...d.foreign, ...d.institution].map(Math.abs);
-        const maxBar = Math.max(...allBars) * 1.1;
-        const sc = (v) => (v / maxBar) * (plotH / 2);
-        const cmin = Math.min(...d.close),
-          cmax = Math.max(...d.close);
-        const cy = (v) =>
-          padT + plotH - ((v - cmin) / (cmax - cmin || 1)) * plotH;
+      /* ---- 지수 차트 (uPlot · 다이버징 막대 + 종가 라인) ----
+         손으로 짠 SVG 를 대체한다. 예전에는 값을 읽으려면 눈대중해야 했고 툴팁·줌·날짜축이
+         없었다. 30거래일이면 견딜 만했지만, 시계열 원장(§4.1)이 쌓이는 순간 끝나는 방식이다.
 
-        let svgInner = `<line x1="${padL}" y1="${midY}" x2="${W - padR}" y2="${midY}" stroke="var(--line-strong)" stroke-width="1"/>`;
-        for (let i = 0; i < n; i++) {
-          const x = padL + i * bw;
-          const fw = bw * 0.32,
-            gw = bw * 0.32,
-            gap = bw * 0.06;
-          // 외국인
-          const fv = d.foreign[i],
-            fh = sc(Math.abs(fv));
-          svgInner += `<rect x="${x + bw * 0.15}" y="${fv >= 0 ? midY - fh : midY}" width="${fw}" height="${fh}" rx="1.5" fill="var(--inflow)" opacity="${fv >= 0 ? 0.92 : 0.55}"/>`;
-          // 기관
-          const iv = d.institution[i],
-            ih = sc(Math.abs(iv));
-          svgInner += `<rect x="${x + bw * 0.15 + fw + gap}" y="${iv >= 0 ? midY - ih : midY}" width="${gw}" height="${ih}" rx="1.5" fill="var(--alert)" opacity="${iv >= 0 ? 0.85 : 0.5}"/>`;
+         x 를 '시간'이 아니라 '거래일 인덱스'로 둔다. 휴장일 간격을 그리지 않기 위함이다 —
+         거래일 막대는 균등 간격이어야 읽히고, 주말 빈칸은 정보가 아니라 잡음이다.
+         축 라벨에서만 인덱스를 날짜로 되돌린다. */
+      let uplot = null;
+      let chartDates = []; // 축·범례 포매터가 참조 (setData 로 갱신되므로 재생성 불필요)
+      let curRange = 30; // 0 = 전체
+
+      /* 시계열 합성: 원장(SERIES)을 깔고 그 위에 계약의 30일 창을 덮는다.
+         창이 언제나 가장 신선하므로, series.js 가 낡아도 화면이 틀리지 않는다.
+
+         단 합성 fallback 일 때는 원장을 아예 섞지 않는다(§1.5 합성/실데이터 경계).
+         series.js 는 진짜 수급이고 FALLBACK_SYNTHETIC 은 시연용이다. 둘이 한 차트에
+         섞이면 "합성 데이터" 배너가 그 자체로 거짓 진술이 된다 — 화면 절반이 실데이터인데. */
+      function indexSeries(mkt) {
+        const m = new Map();
+        const ledger =
+          USING_REAL && Array.isArray(window.SERIES) ? window.SERIES : [];
+        ledger.forEach((r) => {
+          const v = r.index && r.index[mkt];
+          if (v) m.set(r.date, [v.foreign, v.institution, v.close]);
+        });
+        const d = DATA.index[mkt];
+        d.dates.forEach((dt, k) =>
+          m.set(dt, [d.foreign[k], d.institution[k], d.close[k]]),
+        );
+        const dates = [...m.keys()].sort();
+        return {
+          dates: dates,
+          foreign: dates.map((x) => m.get(x)[0]),
+          institution: dates.map((x) => m.get(x)[1]),
+          close: dates.map((x) => m.get(x)[2]),
+        };
+      }
+
+      const cssVar = (n) =>
+        getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+      const mdY = (iso) => (iso || "").slice(5).replace("-", "/"); // 2026-08-14 → 08/14
+      const dateAt = (v) => chartDates[Math.round(v)] || "";
+
+      function chartHeight(w) {
+        // 모바일에서 260px 고정은 너무 납작하다. 가로에 비례시키되 상·하한을 둔다.
+        return Math.max(220, Math.min(320, Math.round(w * 0.34)));
+      }
+
+      function chartOpts(w) {
+        const inflow = cssVar("--inflow"),
+          alertC = cssVar("--alert"),
+          muted = cssVar("--muted"),
+          muted2 = cssVar("--muted-2"),
+          lineC = cssVar("--line");
+        const bars = uPlot.paths.bars;
+        return {
+          width: w,
+          height: chartHeight(w),
+          // padding 은 uPlot 기본값을 쓴다 — 축 여백 계산은 라이브러리가 축 size 와 함께
+          // 하므로, 눈으로 확인하지 않은 채 손대면 라벨이 잘리기 쉽다.
+          // 세로 드래그는 막는다 — 수급 차트에서 y 확대는 쓸 일이 없고 오조작만 부른다
+          cursor: { drag: { x: true, y: false }, y: false },
+          legend: { live: true },
+          scales: {
+            x: { time: false },
+            // 0 을 화면 정중앙에 고정 — 유입/유출을 대칭으로 읽는 기존 설계를 유지한다
+            flow: {
+              range: (u, min, max) => {
+                const m = Math.max(Math.abs(min), Math.abs(max)) * 1.1 || 1;
+                return [-m, m];
+              },
+            },
+          },
+          axes: [
+            {
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { show: false },
+              ticks: { stroke: lineC, size: 4 },
+              values: (u, splits) => splits.map((v) => mdY(dateAt(v))),
+            },
+            {
+              scale: "flow",
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { stroke: lineC, width: 1 },
+              ticks: { show: false },
+              size: 46,
+              values: (u, splits) =>
+                splits.map((v) =>
+                  Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "만" : v,
+                ),
+            },
+            {
+              scale: "close",
+              side: 1,
+              stroke: muted2,
+              font: '10px "IBM Plex Mono", monospace',
+              grid: { show: false },
+              ticks: { show: false },
+              size: 46,
+            },
+          ],
+          series: [
+            { label: "거래일", value: (u, v) => dateAt(v) || "—" },
+            {
+              label: "외국인",
+              scale: "flow",
+              stroke: inflow,
+              fill: inflow,
+              width: 0,
+              paths: bars({ size: [0.42], align: -1 }),
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+            {
+              label: "기관",
+              scale: "flow",
+              stroke: alertC,
+              fill: alertC,
+              width: 0,
+              paths: bars({ size: [0.42], align: 1 }),
+              value: (u, v) => (v == null ? "—" : fmt(v) + "억"),
+            },
+            {
+              label: "종가",
+              scale: "close",
+              stroke: muted,
+              width: 1.4,
+              points: { show: false },
+              value: (u, v) => (v == null ? "—" : fmtP(v)),
+            },
+          ],
+        };
+      }
+
+      function applyRange(n) {
+        const from = curRange && n > curRange ? n - curRange : 0;
+        uplot.setScale("x", { min: from, max: Math.max(from, n - 1) });
+        const hint = document.getElementById("chartHint");
+        if (hint) {
+          const shown = n - from;
+          hint.innerHTML =
+            `<b>${shown}거래일</b> 표시 · 원장 누적 <b>${n}거래일</b>` +
+            `(${chartDates[0]} ~ ${chartDates[n - 1]}) · 드래그로 확대, 더블클릭으로 초기화`;
         }
-        // 종가 라인
-        let path = "";
-        for (let i = 0; i < n; i++) {
-          const x = padL + i * bw + bw / 2;
-          const y = cy(d.close[i]);
-          path +=
-            (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
-        }
-        svgInner += `<path d="${path}" fill="none" stroke="var(--muted)" stroke-width="1.4" opacity="0.65"/>`;
-        // 라벨: 좌측 0, 상하 max
-        svgInner += `<text x="${padL + 2}" y="${midY - 3}" fill="var(--muted-2)" font-size="9" font-family="IBM Plex Mono">0</text>`;
-        svg.innerHTML = svgInner;
+      }
+
+      function renderChart() {
+        const el = document.getElementById("indexChart");
+        if (!el || typeof uPlot === "undefined") return;
+        const s = indexSeries(curMkt);
+        chartDates = s.dates;
+        const n = s.dates.length;
+        const data = [
+          Array.from({ length: n }, (_, i) => i),
+          s.foreign,
+          s.institution,
+          s.close,
+        ];
+        const w = el.clientWidth || 900;
+        if (!uplot) uplot = new uPlot(chartOpts(w), data, el);
+        else uplot.setData(data);
+        applyRange(n);
       }
 
       /* ---- 섹터 종목 카드 ---- */
@@ -1297,6 +1545,92 @@
     ${aligned ? '<b style="color:var(--inflow)">같은 방향</b>으로 정렬됩니다. 지수와 주력 섹터가 동조할 때 신호 신뢰도가 상승합니다' : '<b style="color:var(--alert)">반대 방향</b>으로 갈립니다. 지수 전체와 섹터 흐름이 갈릴 때는 등급을 한 단계 보수적으로 봅니다'}.</p>
     <p>판정 기준은 횡단면(남들 대비)이 아니라 각 지표 자신의 30거래일 시계열 분포입니다 — ergodicity 관점에서, 흐름의 비정상성은 "그 자산 자신의 역사"에 대해서만 정의됩니다.</p>`;
       }
+
+      /* ---- 신호 이력 · OOS 원장 (window.LEDGER 소비, 없으면 섹션 숨김) ----
+         등급 A/B/C 를 매일 보여주면서 "그 신호가 그동안 몇 번 났고 얼마나 쌓였는가"는
+         화면에 없었다. edge-strip 한 줄로 집계만 말할 뿐이라, 표본이 자라는 게 안 보였다.
+
+         이 섹션은 판정을 주장하지 않는다. 판정은 표본이 MIN_N 을 넘어야 가능하고
+         지금은 못 넘었다 — 그 사실 자체를 눈에 보이게 두는 것이 목적이다.
+         격리 구간은 지우지 않고 흐리게 남긴다: 있었지만 증거로 쓰지 않는다는 진술이다. */
+      (function renderLedger() {
+        const box = document.getElementById("ledgerBox");
+        const L = Array.isArray(window.LEDGER) ? window.LEDGER : [];
+        if (!box || !L.length) return; // 원장이 없으면 섹션을 아예 띄우지 않는다
+
+        const rank = { critical: 0, alert: 1, watch: 2 };
+        const rows = L.slice().sort((a, b) => (a.as_of < b.as_of ? -1 : 1));
+        const live = rows.filter((r) => !r.seeded && r.date_aligned);
+        const quar = rows.filter((r) => !r.seeded && !r.date_aligned);
+
+        // 날짜별 스트립 — 그날의 '가장 강한' 신호로 칸 색을 정한다
+        const strip = rows
+          .filter((r) => !r.seeded)
+          .map((r) => {
+            const top = (r.signals || []).reduce(
+              (best, s) =>
+                best === null || rank[s.tier] < rank[best] ? s.tier : best,
+              null,
+            );
+            const cls = [top || "", r.date_aligned ? "" : "quar"]
+              .filter(Boolean)
+              .join(" ");
+            const n = (r.signals || []).length;
+            const state = r.date_aligned ? "정렬 검증" : "격리";
+            return `<div class="lg-day ${cls}" title="${r.as_of} · 신호 ${n}건 · ${state}"></div>`;
+          })
+          .join("");
+
+        // 라이브 신호 목록 — 최근 것부터. 격리분은 증거가 아니므로 목록에 올리지 않는다.
+        const sigs = [];
+        live
+          .slice()
+          .reverse()
+          .forEach((r) =>
+            (r.signals || []).forEach((s) =>
+              sigs.push({ date: r.as_of, ...s }),
+            ),
+          );
+
+        const liveSignalCount = sigs.length;
+        const list = sigs.length
+          ? sigs
+              .slice(0, 12)
+              .map(
+                (s) => `<div class="lg-row">
+      <span class="d mono">${s.date}</span>
+      <span><span class="tier-tag ${s.tier}">● ${s.tier.toUpperCase()}</span> ${s.scope} ${s.dir > 0 ? "매수" : s.dir < 0 ? "매도" : ""}</span>
+      <span class="z mono">z ${Number(s.z).toFixed(2)} · ${s.conf}조류</span>
+    </div>`,
+              )
+              .join("")
+          : `<div class="lg-none">정렬 검증 구간에서 아직 생성된 종목 신호가 없습니다.</div>`;
+
+        // 판정 가능 여부는 edge_status(정산 표본) 기준이다. 원장 '거래일 수'와 혼동하지 않는다.
+        const E = typeof window.EDGE !== "undefined" && window.EDGE;
+        const settled = E ? E.settled || 0 : 0;
+        const verdictLine = settled
+          ? `정산 ${settled}건 — 표본이 판정 기준에 못 미쳐 <b>판정 보류</b>`
+          : `청산이 끝난 신호가 없어 <b>판정 불가(미측정)</b>`;
+
+        box.innerHTML = `<div class="ledger">
+    <div class="lg-head">
+      <span class="t">기록 시점에 미래를 몰랐던 신호들</span>
+      <span class="sub">정렬 검증 <b>${live.length}거래일</b> · 신호 <b>${liveSignalCount}건</b> · 격리 <b>${quar.length}거래일</b></span>
+    </div>
+    <div class="lg-strip">${strip}</div>
+    <div class="lg-legend">
+      <span><i style="background:var(--critical)"></i>Critical</span>
+      <span><i style="background:var(--alert)"></i>Alert</span>
+      <span><i style="background:var(--watch)"></i>Watch</span>
+      <span><i style="background:var(--line)"></i>신호 없음</span>
+      <span><i style="background:var(--muted-2);opacity:.22"></i>격리(증거 제외)</span>
+    </div>
+    ${list}
+    <div class="chart-hint" style="margin-top:12px">${verdictLine} · 표본은 매 거래일 자동으로 쌓인다</div>
+  </div>`;
+        document.getElementById("ledgerEyebrow").style.display = "";
+      })();
 
       /* ---- 리서치 다이제스트 (window.RESEARCH 소비, 없으면 섹션 숨김) ---- */
       function renderResearch() {
@@ -1422,15 +1756,33 @@
       const RUN_GRACE_H = 3; // 스케줄러 지터 허용(실측 최대 163분)
 
       /* ---- 장 상태 pill ----
-         예전엔 "장 마감" 이 하드코딩돼 있어 장중에 열어도 '장 마감'으로 표시됐다.
-         공휴일 달력은 없으므로 주말·시간대만 판단하고, 그 한계를 문구로 넘기지 않는다. */
+         예전엔 "장 마감" 이 하드코딩돼 있어 장중에 열어도 '장 마감'으로 표시됐다. 그 뒤에도
+         주말만 알아서 공휴일에는 '장중'이라고 잘못 말했다.
+
+         이제 계약의 sessions(확정 거래일 달력)를 본다. 지수 차트가 곧 거래일 목록이므로
+         공휴일 달력 라이브러리 없이 얻는다. 다만 달력은 '수집된 시점까지'만 안다 —
+         그 너머(오늘이 아직 수집 전인 미래)는 모른다고 인정하고 시간대 판단으로 돌아간다.
+         모르는 것을 아는 척하지 않는다(§1.5). */
       (function renderMarketStatus() {
         const el = document.getElementById("mktStatus");
         if (!el) return;
         const dow = NOW_KST.getUTCDay();
         const min = NOW_KST.getUTCHours() * 60 + NOW_KST.getUTCMinutes();
+        const today = NOW_KST.toISOString().slice(0, 10);
+        const sessions = Array.isArray(DATA.sessions) ? DATA.sessions : [];
+        // 달력이 오늘까지 닿는가: 마지막 확정 거래일이 오늘 이후이거나, 오늘 수집이 끝났거나.
+        const collectedDate = DATA.collected_at
+          ? new Date(new Date(DATA.collected_at).getTime() + 9 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10)
+          : "";
+        const calendarKnowsToday =
+          sessions.length &&
+          (sessions[sessions.length - 1] >= today || collectedDate >= today);
+
         let txt;
-        if (dow === 0 || dow === 6) txt = "휴장";
+        if (dow === 0 || dow === 6) txt = "휴장 (주말)";
+        else if (calendarKnowsToday && !sessions.includes(today)) txt = "휴장";
         else if (min < 9 * 60) txt = "장 시작 전";
         else if (min < 15 * 60 + 30) txt = "장중";
         else txt = "장 마감";
@@ -1473,7 +1825,14 @@
         // 지터 유예(3h)가 지난 슬롯만 기대 대상으로 삼는다 — 지연 중에 오경보를 내지 않기 위함.
         const due = new Date(NOW_KST.getTime() - RUN_GRACE_H * 3600 * 1000);
         const expected = new Date(
-          Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate(), RUN_HOUR_KST, 0, 0),
+          Date.UTC(
+            due.getUTCFullYear(),
+            due.getUTCMonth(),
+            due.getUTCDate(),
+            RUN_HOUR_KST,
+            0,
+            0,
+          ),
         );
         if (expected > due) expected.setUTCDate(expected.getUTCDate() - 1);
         while (expected.getUTCDay() === 0 || expected.getUTCDay() === 6)
@@ -1509,10 +1868,17 @@
         //   pending      = 신호는 났으나 청산일 미도래
         const head = `<b>엣지 원장(OOS)</b> · 정렬 검증 ${E.live_records || 0}거래일 · 정산 ${E.settled || 0}건 / 미정산 ${E.pending || 0}건`;
         if (h5 && h5.n > 0) {
-          const m = h5.meanPct === null ? "-" : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
-          parts.push(`${head} · 5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`);
+          const m =
+            h5.meanPct === null
+              ? "-"
+              : (h5.meanPct >= 0 ? "+" : "") + h5.meanPct + "%";
+          parts.push(
+            `${head} · 5일 보유 N=${h5.n} 평균 ${m} → <b>${h5.verdict}</b>`,
+          );
         } else if (E.settled) {
-          parts.push(`${head} · 5일 보유 표본이 아직 최소 기준에 못 미칩니다 → <b>판정 보류</b>`);
+          parts.push(
+            `${head} · 5일 보유 표본이 아직 최소 기준에 못 미칩니다 → <b>판정 보류</b>`,
+          );
         } else {
           parts.push(
             `${head} — <b>아직 판정 불가</b>: 청산이 끝난 신호가 없습니다` +
@@ -1522,7 +1888,9 @@
         if (E.quarantined_records) {
           // 격리 기준일은 데이터에서 온다. 예전엔 '2026-08-07'이 HTML에 박혀 있었고,
           // 게다가 그 날짜 레코드 자신이 격리 대상이라 "이전"이라는 표현이 사실과 어긋났다.
-          const through = E.quarantine_through ? `${E.quarantine_through}까지` : "수집기 수정 이전";
+          const through = E.quarantine_through
+            ? `${E.quarantine_through}까지`
+            : "수집기 수정 이전";
           parts.push(
             `<span class="warn">⚠ ${through} ${E.quarantined_records}일치는 수집 결함(장중 스냅샷 오염 · 종목-지수 정렬 어긋남)으로 격리되어 증거에서 제외됐습니다.</span>`,
           );
@@ -1546,7 +1914,30 @@
         curMkt = b.dataset.mkt;
         renderAll();
       });
-      window.addEventListener("resize", renderChart);
+      document.getElementById("rangeToggle").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        document
+          .querySelectorAll("#rangeToggle button")
+          .forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        curRange = Number(b.dataset.range);
+        if (uplot) applyRange(chartDates.length);
+      });
+      // 리사이즈는 데이터가 아니라 크기만 바뀐다 — setSize 로 충분하고 확대 상태도 보존된다.
+      // (예전 SVG 는 매번 전부 다시 그렸다)
+      let resizeTimer = null;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          const el = document.getElementById("indexChart");
+          if (uplot && el && el.clientWidth)
+            uplot.setSize({
+              width: el.clientWidth,
+              height: chartHeight(el.clientWidth),
+            });
+        }, 120);
+      });
     </script>
   </body>
 </html>
