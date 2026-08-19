@@ -77,6 +77,12 @@ def load_fixture():
     idx = {m: {dt: pick(v) for dt, v in obs_i[m].items()} for m in obs_i}
     stk = {tk: {dt: pick(v) for dt, v in obs_s[tk].items()} for tk in obs_s}
     days = sorted(set(idx["KOSPI"]) & set(idx["KOSDAQ"]))
+    # 유니버스를 넓히면 신규 종목은 최근 발행본에만 있다. 그대로 전 종목 교집합을 쓰면
+    # 창이 신규 종목의 짧은 이력으로 붕괴한다(2026-08-19: 10종목 확장 직후 74일 → 30일).
+    # 리플레이가 검증하는 건 사이클 역학이지 유니버스 크기가 아니므로,
+    # '이력이 충분한 종목'만 픽스처로 삼는다.
+    MIN_TICKER_DAYS = 32
+    stk = {tk: v for tk, v in stk.items() if len(v) >= MIN_TICKER_DAYS}
     for tk in stk:
         days = [d for d in days if d in stk[tk]]
     return idx, stk, days
