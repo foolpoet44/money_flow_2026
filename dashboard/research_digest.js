@@ -123,7 +123,7 @@
     }
     if (r.sector) {
       score += 20;
-      reasons.push("반도체 섹터 연관");
+      reasons.push("추적 산업 연관");
     }
     if (r.category === "market") {
       score += 15;

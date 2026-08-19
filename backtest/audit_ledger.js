@@ -50,7 +50,9 @@ function git(cmd) {
 
 function loadSnapshots() {
   const out = [];
-  for (const line of git('git log --reverse --format="%H %cI" -- docs/data.js').trim().split("\n")) {
+  for (const line of git('git log --reverse --format="%H %cI" -- docs/data.js')
+    .trim()
+    .split("\n")) {
     if (!line.trim()) continue;
     const [sha, iso] = line.trim().split(/\s+/);
     let raw;
@@ -80,16 +82,27 @@ function loadSnapshots() {
 }
 
 const isConfirmed = (s, d) =>
-  s.observedDate > d ? true : s.observedDate < d ? false : s.observedMin >= SESSION_CLOSE_MIN;
+  s.observedDate > d
+    ? true
+    : s.observedDate < d
+      ? false
+      : s.observedMin >= SESSION_CLOSE_MIN;
 
 // ── 진단 ─────────────────────────────────────────────────
 const snaps = loadSnapshots();
-const records = fs.readFileSync(ledgerPath, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
+const records = fs
+  .readFileSync(ledgerPath, "utf8")
+  .trim()
+  .split("\n")
+  .filter(Boolean)
+  .map(JSON.parse);
 
 console.log("════════════════════════════════════════════════════");
 console.log(" OOS 원장 감사 · 2026-08-07 이전 구간");
 console.log("════════════════════════════════════════════════════");
-console.log(`발행본 스냅샷 ${snaps.length}개 · 원장 레코드 ${records.length}건`);
+console.log(
+  `발행본 스냅샷 ${snaps.length}개 · 원장 레코드 ${records.length}건`,
+);
 
 // ① 장중 오염: 레코드가 '그 세션 마감 전'에 기록됐는가
 let intraday = 0;
@@ -104,15 +117,20 @@ for (const r of records) {
 // 결손: 확정 거래일 중 원장에 없는 날
 const tradingDays = new Set();
 for (const s of snaps)
-  for (const d of s.data.index.KOSPI.dates) if (isConfirmed(s, d)) tradingDays.add(d);
+  for (const d of s.data.index.KOSPI.dates)
+    if (isConfirmed(s, d)) tradingDays.add(d);
 const all = [...tradingDays].sort();
 const have = new Set(records.map((r) => r.as_of));
 const first = records[0].as_of;
 const lastD = all[all.length - 1];
 const missing = all.filter((d) => d >= first && d <= lastD && !have.has(d));
 
-console.log(`\n① 장중 스냅샷으로 만들어진 레코드 : ${intraday}/${records.length}건`);
-console.log(`   선착순 기각으로 결손된 거래일    : ${missing.length}일  ${missing.join(", ")}`);
+console.log(
+  `\n① 장중 스냅샷으로 만들어진 레코드 : ${intraday}/${records.length}건`,
+);
+console.log(
+  `   선착순 기각으로 결손된 거래일    : ${missing.length}일  ${missing.join(", ")}`,
+);
 
 // ② 종목–지수 정렬: 시드 vs 자동 오프셋, 그리고 자동끼리의 일관성
 const seed = snaps[0];
@@ -127,7 +145,8 @@ for (const st of seed.data.sector.stocks) {
       const j = ad.indexOf(d);
       if (j < 0 || !isConfirmed(s, d)) continue;
       const a = s.data.sector.stocks.find((x) => x.ticker === st.ticker);
-      if (j + 1 < ad.length) (a.foreign[j + 1] === st.foreign[i] ? match++ : mismatch++);
+      if (j + 1 < ad.length)
+        a.foreign[j + 1] === st.foreign[i] ? match++ : mismatch++;
       break;
     }
   });
@@ -138,14 +157,20 @@ for (const s of autos) {
   for (const st of s.data.sector.stocks)
     dates.forEach((dt, i) => {
       if (!isConfirmed(s, dt)) return;
-      (obs[st.ticker + "|" + dt] = obs[st.ticker + "|" + dt] || []).push(st.foreign[i]);
+      (obs[st.ticker + "|" + dt] = obs[st.ticker + "|" + dt] || []).push(
+        st.foreign[i],
+      );
     });
 }
 const keys = Object.keys(obs);
 const split = keys.filter((k) => new Set(obs[k]).size > 1).length;
 
-console.log(`\n② 자동 라벨 -1 보정 후 시드와 일치  : ${match}건 / 불일치 ${mismatch}건`);
-console.log(`   자동 스냅샷끼리 값이 갈리는 조합   : ${split}/${keys.length}건`);
+console.log(
+  `\n② 자동 라벨 -1 보정 후 시드와 일치  : ${match}건 / 불일치 ${mismatch}건`,
+);
+console.log(
+  `   자동 스냅샷끼리 값이 갈리는 조합   : ${split}/${keys.length}건`,
+);
 console.log(
   split > keys.length / 2
     ? "   → 오프셋이 상수가 아니다. 스냅샷별 추정 없이는 복원 불가 ⇒ 격리가 정답."
@@ -153,12 +178,20 @@ console.log(
 );
 
 console.log("\n── 판단 ────────────────────────────────────────────");
-console.log("이 구간은 신호를 다시 계산하지 않는다. 어떤 재계산도 '스냅샷별 정렬 오프셋 추정'");
-console.log("위에 서게 되고, 그렇게 만든 원장은 정직한 증거가 아니라 정교해 보이는 추정치다.");
-console.log("date_aligned:false 로 격리하고, 수집기 수정 이후분부터 정본 표본으로 센다.");
+console.log(
+  "이 구간은 신호를 다시 계산하지 않는다. 어떤 재계산도 '스냅샷별 정렬 오프셋 추정'",
+);
+console.log(
+  "위에 서게 되고, 그렇게 만든 원장은 정직한 증거가 아니라 정교해 보이는 추정치다.",
+);
+console.log(
+  "date_aligned:false 로 격리하고, 수집기 수정 이후분부터 정본 표본으로 센다.",
+);
 
 if (!ANNOTATE) {
-  console.log("\n· 진단만 수행했습니다. 표식을 기입하려면 --annotate 를 붙이세요.");
+  console.log(
+    "\n· 진단만 수행했습니다. 표식을 기입하려면 --annotate 를 붙이세요.",
+  );
   process.exit(0);
 }
 
@@ -170,6 +203,11 @@ const out = records.map((r) => {
   }
   return r;
 });
-fs.writeFileSync(ledgerPath, out.map((r) => JSON.stringify(r)).join("\n") + "\n");
-console.log(`\n✓ ${touched}건에 date_aligned:false 표식 기입 (신호는 손대지 않음)`);
+fs.writeFileSync(
+  ledgerPath,
+  out.map((r) => JSON.stringify(r)).join("\n") + "\n",
+);
+console.log(
+  `\n✓ ${touched}건에 date_aligned:false 표식 기입 (신호는 손대지 않음)`,
+);
 console.log("· settle.js 가 이 표식을 보고 legacy 코호트로 분리 집계한다.");

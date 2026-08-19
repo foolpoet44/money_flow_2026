@@ -1,7 +1,7 @@
 """
 자금 조류 · Money Flow Intelligence — 수집기 (collector)
 ────────────────────────────────────────────────────────
-네이버 금융 JSON API로 KOSPI/KOSDAQ 지수 수급 + 반도체 섹터 종목별 수급을 긁어
+네이버 금융 JSON API로 KOSPI/KOSDAQ 지수 수급 + 추적 유니버스(universe.json) 종목별 수급을 긁어
 대시보드(dashboard/index.html)가 읽는 data.json 을 생성한다.
 
 왜 네이버인가 (설계 결정 기록):
@@ -44,8 +44,11 @@ FETCH_SLACK = 8    # 미확정 캔들을 버려도 30개가 남도록 넉넉히 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "universe.json"), encoding="utf-8") as _fp:
     _UNIVERSE = json.load(_fp)
-SECTOR_NAME = _UNIVERSE["sector"]
-SECTOR = [(s["ticker"], s["name"]) for s in _UNIVERSE["stocks"]]
+SECTOR_NAME = _UNIVERSE.get("label", "추적 유니버스")
+UNIVERSE_VERSION = _UNIVERSE.get("version", "")
+# (티커, 종목명, 산업). 산업은 2026-08-19 확장 때 들어왔다 — 유니버스가 단일 섹터가
+# 아니라 5개 산업이 되면서, 로테이션(어디서 어디로)이 읽을 수 있는 정보가 됐다.
+SECTOR = [(s["ticker"], s["name"], s.get("industry", "")) for s in _UNIVERSE["stocks"]]
 
 MARKETS = ["KOSPI", "KOSDAQ"]
 
@@ -420,9 +423,9 @@ def main():
         cal[mkt] = index_calendar(mkt, pending)
 
     # 2) 종목 수급(거래일→값 맵)
-    print("· 반도체 섹터 수집 중…")
+    print(f"· 유니버스 수집 중… ({SECTOR_NAME} · {len(SECTOR)}종목)")
     smaps, legacy = {}, {}
-    for tk, nm in SECTOR:
+    for tk, nm, _ind in SECTOR:
         print(f"   - {nm} ({tk})")
         smaps[tk], legacy[tk] = stock_rows(tk, pending)
         time.sleep(SLEEP)
@@ -432,7 +435,7 @@ def main():
     #    갖고 있지 않으면 그 날은 온전히 관측된 세션이 아니다 — 지어내지 않고 뒤로 물린다.
     #    (부수효과: 종목 수급이 지수보다 늦게 게시되는 날엔 as_of 가 하루 뒤로 물러난다.
     #     늦게 갱신될지언정 어긋난 값을 내보내지 않는다.)
-    window = common_window(cal, smaps, [tk for tk, _ in SECTOR if not legacy[tk]])
+    window = common_window(cal, smaps, [tk for tk, _, _ in SECTOR if not legacy[tk]])
     print(f"· 공통 확정 거래일 {len(window)}일 · {window[0]} → {window[-1]}")
 
     # 4) 지수 수급 — 확정된 창에 대해서만 호출
@@ -450,7 +453,7 @@ def main():
 
     # 5) 종목 배열을 창에 맞춰 조립 (날짜 기준 — 위치 기준 아님)
     stocks = []
-    for tk, nm in SECTOR:
+    for tk, nm, ind in SECTOR:
         if legacy[tk]:
             print(f"   ⚠ {nm}({tk}): trend 응답에 거래일 필드 없음 — 위치 기반 폴백 사용"
                   f" (지수와의 정렬 보장 불가)")
@@ -463,7 +466,7 @@ def main():
                 "fhold": [m[d]["fhold"] for d in window],
                 "close": [m[d]["close"] for d in window],
             }
-        stocks.append({"ticker": tk, "name": nm, **sf})
+        stocks.append({"ticker": tk, "name": nm, "industry": ind, **sf})
 
     data = {
         "as_of": window[-1],

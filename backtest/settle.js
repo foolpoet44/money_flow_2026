@@ -20,15 +20,19 @@ const https = require("https");
 const S = require(path.join(__dirname, "stats.js"));
 
 const { HORIZONS, COST } = S.CONFIG;
-const { mean, tstat, pct, verdict } = S;
+const { mean, tstat, pct, verdict, byDayMean } = S;
 
 // 종목명 → 티커 (원장은 종목명으로 기록되므로 가격 조회용 매핑).
 // 목록은 universe.json 단일 출처에서 뒤집어 만든다 — 예전엔 여기에 5종목이 또 박혀 있어,
 // 유니버스를 늘리면 정산만 조용히 옛 종목을 보고 있었다.
+// 현역 + 은퇴 종목을 모두 넣는다. 유니버스에서 빠진 종목도 원장에는 신호가 남아 있고,
+// 매핑이 사라지면 그 구간 정산이 조용히 건너뛰어진다(실측: 정산 4건 → 2건).
+// 신규 레코드는 signal 에 ticker 를 직접 싣지만, 그 이전 레코드는 이 맵이 유일한 경로다.
+const _U = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "..", "universe.json"), "utf8"),
+);
 const TICKER = Object.fromEntries(
-  JSON.parse(
-    fs.readFileSync(path.resolve(__dirname, "..", "universe.json"), "utf8"),
-  ).stocks.map((s) => [s.name, s.ticker]),
+  [...(_U.stocks || []), ...(_U.retired || [])].map((s) => [s.name, s.ticker]),
 );
 
 const HEADERS = {
@@ -87,18 +91,29 @@ function report(title, store, baseline, counts) {
     );
     return;
   }
-  const pad = [6, 5, 4, 8, 7, 6, 8, 16];
-  const head = ["등급", "기간", "N", "평균", "적중", "t값", "기준선", "판정"];
+  const pad = [6, 5, 8, 8, 7, 6, 8, 16];
+  const head = [
+    "등급",
+    "기간",
+    "N일/건",
+    "평균",
+    "적중",
+    "t값",
+    "기준선",
+    "판정",
+  ];
   console.log("  " + head.map((s, i) => s.padEnd(pad[i])).join(""));
   for (const tier of ["critical", "alert", "watch", "ALL"]) {
     for (const h of HORIZONS) {
-      const arr = store[tier][h];
-      if (!arr.length) continue;
-      const bm = baseline[h].length ? mean(baseline[h]) : 0;
+      const raw = store[tier][h];
+      if (!raw.length) continue;
+      // 같은 날 여러 종목 신호는 1관측이다(수익률 쌍상관 0.87 실측) — stats.js 주석 참조
+      const arr = byDayMean(raw);
+      const bm = baseline[h].length ? mean(byDayMean(baseline[h])) : 0;
       const row = [
         tier === "ALL" ? "전체" : tier,
         h + "일",
-        String(arr.length),
+        String(arr.length) + "/" + raw.length,
         pct(mean(arr)),
         (100 * arr.filter((x) => x > 0).length) / arr.length + "%",
         tstat(arr).toFixed(2),
@@ -130,16 +145,28 @@ async function main() {
   }
   const records = lines.map((l) => JSON.parse(l));
 
-  // 필요한 종목 가격 한 번씩 조회
-  const names = [
-    ...new Set(records.flatMap((r) => r.signals.map((s) => s.scope))),
-  ];
+  // 필요한 종목 가격 한 번씩 조회.
+  // 티커는 신호 자신에 실린 값을 먼저 쓰고(자족적 원장), 없으면 이름 매핑으로 떨어진다.
+  const need = new Map(); // 종목명 → 티커
+  for (const r of records)
+    for (const s of r.signals)
+      if (!need.has(s.scope)) need.set(s.scope, s.ticker || TICKER[s.scope]);
+
   const prices = {};
-  for (const nm of names) {
-    const tk = TICKER[nm];
-    if (!tk) continue;
+  const unresolved = [];
+  for (const [nm, tk] of need) {
+    if (!tk) {
+      unresolved.push(nm);
+      continue;
+    }
     prices[nm] = await getPrices(tk);
   }
+  if (unresolved.length)
+    // 조용히 건너뛰지 않는다 — 정산에서 빠진 종목은 증거에서 빠진 종목이다
+    console.warn(
+      `⚠ 티커를 못 찾아 정산에서 제외된 종목: ${unresolved.join(", ")}` +
+        ` — universe.json 의 retired 에 추가하세요`,
+    );
 
   // 기준선(드리프트): 가격 차트에서 무조건 익일진입 롱 수익 풀링
   const baseline = {};
@@ -153,7 +180,7 @@ async function main() {
         if (x < P.dates.length) {
           const ret =
             (P.close[P.dates[x]] - P.close[P.dates[e]]) / P.close[P.dates[e]];
-          baseline[h].push(ret);
+          baseline[h].push({ date: P.dates[i], net: ret });
         }
       });
     }
@@ -197,8 +224,9 @@ async function main() {
         const entry = P.close[P.dates[e]],
           exit = P.close[P.dates[x]];
         const net = (sig.dir * (exit - entry)) / entry - COST;
-        store[mode][sig.tier][h].push(net);
-        store[mode].ALL[h].push(net);
+        // 날짜를 함께 싣는다 — 같은 날 여러 종목 신호를 1관측으로 묶기 위함(stats.byDayMean)
+        store[mode][sig.tier][h].push({ date: rec.as_of, net });
+        store[mode].ALL[h].push({ date: rec.as_of, net });
         counts[mode].settled++;
       }
     }
@@ -275,10 +303,12 @@ async function main() {
     horizons: {},
   };
   HORIZONS.forEach((h) => {
-    const arr = store.live.ALL[h];
-    const bm = baseline[h].length ? mean(baseline[h]) : 0;
+    const raw = store.live.ALL[h];
+    const arr = byDayMean(raw); // 판정의 표본은 '거래일'이다
+    const bm = baseline[h].length ? mean(byDayMean(baseline[h])) : 0;
     status.horizons[h] = {
-      n: arr.length,
+      n: arr.length, // 독립 관측 = 신호가 난 거래일 수
+      trades: raw.length, // 원자료 신호×기간 건수(표시용)
       meanPct: arr.length ? +(mean(arr) * 100).toFixed(2) : null,
       verdict: verdict(arr, bm),
     };

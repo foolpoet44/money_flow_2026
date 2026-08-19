@@ -114,7 +114,7 @@ test("섹터·시황·조회수 가점이 이유로 누적", () => {
   const sigMap = {};
   const out = D.scoreReport(r, sigMap);
   assert.ok(out.score > 0);
-  assert.ok(out.reasons.includes("반도체 섹터 연관"));
+  assert.ok(out.reasons.includes("추적 산업 연관"));
   assert.ok(out.reasons.includes("시황 — 전체 맥락"));
   assert.ok(out.reasons.includes("조회수 상위"));
   assert.ok(out.reasons.some((x) => x.includes("목표가")));

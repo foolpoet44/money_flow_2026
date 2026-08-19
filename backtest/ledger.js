@@ -45,7 +45,10 @@ function appendIfNew(rec) {
   // 정확했지만 "마지막 줄 = 최신"을 가정하는 코드가 생기면 조용히 틀린다.
   const writeSorted = (rows) => {
     rows.sort((a, b) => (a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : 0));
-    fs.writeFileSync(ledgerPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    fs.writeFileSync(
+      ledgerPath,
+      rows.map((r) => JSON.stringify(r)).join("\n") + "\n",
+    );
   };
   const parsed = lines.map((l) => {
     try {
@@ -120,9 +123,19 @@ try {
 
 const signals = E.buildSignals(data);
 
+// 유니버스 버전을 레코드에 박는다.
+// 종목을 늘리면 그 전후 표본은 성격이 다르다(신호 발생률·산업 구성이 바뀐다).
+// 표식 없이 섞으면 나중에 "이 구간은 몇 종목이었나"를 복원할 수 없다 —
+// 장중 오염 구간을 date_aligned 로 갈라낸 것과 같은 이유다.
+const UNIVERSE = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "universe.json"), "utf8"),
+);
+
 const rec = {
   as_of: data.as_of,
   logged_at: new Date().toISOString(),
+  universe_version: UNIVERSE.version || null,
+  universe_size: (UNIVERSE.stocks || []).length,
   // 2026-08-07 이후 수집기는 종목 시계열을 지수 날짜와 '날짜 기준'으로 맞춘다(위치 기준 아님).
   // 이 표식이 있는 레코드만 settle.js 가 정본 OOS 표본으로 센다. 이전 구간은 격리된다.
   date_aligned: true,
@@ -131,15 +144,34 @@ const rec = {
     .filter((s) => s.scope !== "KOSPI" && s.scope !== "KOSDAQ")
     .map((s) => ({
       scope: s.scope,
+      ticker: s.ticker || null, // 원장이 외부 매핑 없이 스스로 정산 가능하도록
       tier: s.tier,
       z: +s.z.toFixed(2),
       conf: s.conf,
       dir: s.title.includes("매수") ? 1 : s.title.includes("매도") ? -1 : 0,
     })),
 };
+/* 소급 기록 차단 (2026-08-19 사고).
+   유니버스를 5→10종목으로 넓힌 날, 로컬에서 collector+ledger 를 돌렸더니 전날(08-18)
+   신호가 '새 유니버스'로 다시 계산돼 원장에 들어갔다. 그날의 정규 실행(Actions)은 이미
+   그 시점 유니버스(5종목)로 08-18 을 기록해 둔 상태였다.
+
+   이건 가격을 미리 본 것은 아니지만, **종목 선정을 그날 이후에 하고 그날을 기록한 것**이다.
+   원장의 존재 이유가 "기록 시점에 미래를 몰랐다" 하나인데 그 축이 무너진다.
+   → as_of 가 유니버스 확정일보다 앞서면 적재하지 않는다. 원장은 앞으로만 자란다. */
+if (rec.universe_version && rec.as_of < rec.universe_version) {
+  console.log(
+    `· 원장: ${rec.as_of} 는 유니버스 확정일(${rec.universe_version})보다 앞섬 — 소급 기록 차단.\n` +
+      "  새 유니버스는 확정일 이후 거래일부터 기록된다(과거를 새 종목 구성으로 다시 쓰지 않는다).",
+  );
+  process.exit(0);
+}
+
 const result = appendIfNew(rec);
 if (result === "appended") {
-  console.log(`✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`);
+  console.log(
+    `✓ 엣지 원장 적재: ${data.as_of} · 종목신호 ${rec.signals.length}건`,
+  );
 } else if (result === "upgraded") {
   console.log(
     `✓ 엣지 원장 승격: ${data.as_of} · 정렬 미검증 레코드를 확정본으로 교체 (신호 ${rec.signals.length}건)`,

@@ -1,7 +1,7 @@
 # 자금 조류 · Money Flow Intelligence
 
 한국 주식시장의 자금 흐름(외국인·기관 수급)을 일 단위로 읽어 행동 가능한 신호로 바꾸는 모니터링 시스템.
-추적 대상은 KOSPI/KOSDAQ 지수 수급과 반도체 섹터(삼성전자·SK하이닉스·삼성전기·SK스퀘어·한미반도체) 종목별 수급이다.
+추적 대상은 KOSPI/KOSDAQ 지수 수급과 **5개 산업 대표주 10종목**(반도체·전력·금융·피지컬AI·에너지 × 산업당 시총 상위 2) 종목별 수급이다. 종목 구성과 선정 규칙은 [`universe.json`](./universe.json)이 정본이다.
 
 > 설계·신호 명세·데이터 계약의 정본은 [`CLAUDE.md`](./CLAUDE.md)다. 이 README는 실행 빠른 시작만 다룬다.
 
@@ -10,7 +10,7 @@
 ```
 money_flow_2606/
 ├── CLAUDE.md                  # 설계 정본 (데이터 계약 §4, 신호 엔진 §5)
-├── universe.json              # 추적 종목 단일 출처 — 종목 추가는 여기만 고친다
+├── universe.json              # 추적 종목 단일 출처 — 산업·선정규칙·은퇴종목까지 여기만 고친다
 ├── collector/
 │   ├── collector.py           # 수급·지수 수집(네이버 JSON API) → data.json + data.js + docs/series/
 │   ├── research_collector.py  # 증권사 리포트 수집(네이버 리서치) → research.json + research.js

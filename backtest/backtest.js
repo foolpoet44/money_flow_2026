@@ -20,7 +20,7 @@ const S = require(path.join(__dirname, "stats.js"));
 
 // 공유 방법론(stats.js) — backtest와 settle이 같은 잣대를 쓴다
 const { WARMUP, HORIZONS, COST, MIN_N } = S.CONFIG;
-const { mean, tstat, pct, verdict } = S;
+const { mean, tstat, pct, verdict, byDayMean } = S;
 
 const hist = JSON.parse(
   fs.readFileSync(path.join(__dirname, "history.json"), "utf8"),
@@ -48,7 +48,10 @@ for (const s of hist.stocks) {
     HORIZONS.forEach((h) => {
       const exit = t + 1 + h;
       if (exit < N)
-        baseline[h].push((close[exit] - close[t + 1]) / close[t + 1]);
+        baseline[h].push({
+          date: s.dates[t],
+          net: (close[exit] - close[t + 1]) / close[t + 1],
+        });
     });
 
     // 시점불변 신호: t까지의 외국인 시계열로 z 산출
@@ -67,13 +70,15 @@ for (const s of hist.stocks) {
       if (exit >= N) return;
       const raw = (close[exit] - close[entry]) / close[entry];
       const net = dir * raw - COST; // 신호 방향 베팅, 비용 차감
-      trades[tier][h].push(net);
-      trades.ALL[h].push(net);
+      // 날짜를 함께 싣는다 — 같은 날 여러 종목 신호는 1관측으로 묶인다(stats.byDayMean)
+      const day = s.dates[t];
+      trades[tier][h].push({ date: day, net });
+      trades.ALL[h].push({ date: day, net });
       if (dir > 0) {
         // long-only(매수신호만 롱) — 개인 현실 모드
         const netLong = raw - COST;
-        tradesLong[tier][h].push(netLong);
-        tradesLong.ALL[h].push(netLong);
+        tradesLong[tier][h].push({ date: day, net: netLong });
+        tradesLong.ALL[h].push({ date: day, net: netLong });
       }
     });
   }
@@ -83,19 +88,20 @@ function reportBucket(title, store) {
   console.log(`\n■ ${title}`);
   console.log(
     "  " +
-      ["등급", "기간", "N", "평균", "적중", "t값", "기준선", "판정"]
-        .map((s, i) => s.padEnd([6, 5, 4, 8, 7, 6, 8, 16][i]))
+      ["등급", "기간", "N일/건", "평균", "적중", "t값", "기준선", "판정"]
+        .map((s, i) => s.padEnd([6, 5, 8, 8, 7, 6, 8, 16][i]))
         .join(""),
   );
   for (const tier of ["critical", "alert", "watch", "ALL"]) {
     for (const h of HORIZONS) {
-      const arr = store[tier][h];
-      const bm = baseline[h].length ? mean(baseline[h]) : 0;
-      if (!arr.length) continue;
+      const raw = store[tier][h];
+      if (!raw.length) continue;
+      const arr = byDayMean(raw); // 판정 표본은 거래일 수 (종목 수가 아니다)
+      const bm = baseline[h].length ? mean(byDayMean(baseline[h])) : 0;
       const row = [
         tier === "ALL" ? "전체" : tier,
         h + "일",
-        String(arr.length),
+        String(arr.length) + "/" + raw.length,
         arr.length ? pct(mean(arr)) : "-",
         arr.length
           ? ((100 * arr.filter((x) => x > 0).length) / arr.length).toFixed(0) +
@@ -108,7 +114,7 @@ function reportBucket(title, store) {
       console.log(
         "  " +
           row
-            .map((s, i) => String(s).padEnd([6, 5, 4, 8, 7, 6, 8, 16][i]))
+            .map((s, i) => String(s).padEnd([6, 5, 8, 8, 7, 6, 8, 16][i]))
             .join(""),
       );
     }

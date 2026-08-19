@@ -547,6 +547,40 @@
         font-weight: 600;
       }
 
+      /* 산업 머리줄 — 그리드 전체 폭을 쓴다. 로테이션은 산업 단위로만 읽힌다. */
+      .ind-head {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        margin: 6px 0 -4px;
+        padding-bottom: 7px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+      .ind-head:not(:first-child) {
+        margin-top: 18px;
+      }
+      .ind-name {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .ind-stat {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .ind-stat b {
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 600;
+      }
+      .ind-stat b.in {
+        color: var(--inflow);
+      }
+      .ind-stat b.out {
+        color: var(--outflow);
+      }
+
       /* ---------- 신호 이력 (OOS 원장) ---------- */
       .ledger {
         background: var(--panel);
@@ -1103,7 +1137,7 @@
       <!-- SECTOR -->
       <div class="eyebrow">
         <span class="num">02</span>
-        <h2>반도체 섹터 · 종목별 수급</h2>
+        <h2>산업별 유니버스 · 종목별 수급</h2>
         <div class="rule"></div>
       </div>
       <div class="sector" id="sectorGrid"></div>
@@ -1639,8 +1673,41 @@
         return (n >= 0 ? "+" : "−") + Math.abs(n).toFixed(digits);
       }
 
+      /* 산업별 그룹 렌더 — 유니버스가 5개 산업으로 넓어진 이유가 로테이션이므로,
+         종목을 평면으로 늘어놓으면 확장의 요점이 화면에서 사라진다.
+         산업 머리줄에 그 산업의 오늘 합산 수급과 30일 수익률을 함께 둔다.
+         (industry 필드가 없는 구버전 data.js 는 단일 그룹으로 graceful 하게 떨어진다) */
       function renderSector() {
-        document.getElementById("sectorGrid").innerHTML = DATA.sector.stocks
+        const stocks = DATA.sector.stocks;
+        const groups = new Map();
+        stocks.forEach((s) => {
+          const k = s.industry || DATA.sector.name || "추적 종목";
+          if (!groups.has(k)) groups.set(k, []);
+          groups.get(k).push(s);
+        });
+
+        const groupHead = (ind, ss) => {
+          const todayF = ss.reduce((a, s) => a + s.foreign[N - 1], 0);
+          const rets = ss
+            .filter((s) => Array.isArray(s.close) && s.close.length === N)
+            .map((s) => 100 * (s.close[N - 1] / s.close[0] - 1));
+          const avg = rets.length
+            ? rets.reduce((a, b) => a + b, 0) / rets.length
+            : null;
+          return `<div class="ind-head">
+        <span class="ind-name">${ind}</span>
+        <span class="ind-stat">외국인 오늘 <b class="${todayF >= 0 ? "in" : "out"}">${fmt(todayF)}억</b></span>
+        ${avg === null ? "" : `<span class="ind-stat">30일 <b class="${avg >= 0 ? "in" : "out"}">${fmtF(avg, 1)}%</b></span>`}
+      </div>`;
+        };
+
+        document.getElementById("sectorGrid").innerHTML = [...groups.entries()]
+          .map(([ind, ss]) => groupHead(ind, ss) + renderStockCards(ss))
+          .join("");
+      }
+
+      function renderStockCards(list) {
+        return list
           .map((s) => {
             const f = s.foreign[N - 1],
               i = s.institution[N - 1];
@@ -1731,7 +1798,7 @@
 
         document.getElementById("verifyNote").innerHTML = `
     <h4>단일 지표를 믿지 않는다 — 교차 확인 로그</h4>
-    <p>오늘 반도체 섹터 외국인 <b>${fmt(sector)}억</b>과 <b>나머지 시장</b>(KOSPI 전체 − 섹터) 외국인 <b>${fmt(rest)}억</b>이
+    <p>오늘 추적 유니버스 외국인 <b>${fmt(sector)}억</b>과 <b>나머지 시장</b>(KOSPI 전체 − 유니버스) 외국인 <b>${fmt(rest)}억</b>이
     ${
       aligned
         ? '<b style="color:var(--inflow)">같은 방향</b>입니다. 섹터와 시장 전반이 함께 움직이면 종목 신호를 시장 전체의 흐름으로 읽습니다'

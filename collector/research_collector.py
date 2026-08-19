@@ -36,8 +36,13 @@ import urllib.error
 # 종목 목록은 universe.json 단일 출처에서 읽는다(수급 collector와 같은 유니버스).
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(_ROOT, "universe.json"), encoding="utf-8") as _fp:
-    SECTOR_TICKERS = {s["ticker"] for s in json.load(_fp)["stocks"]}
-SECTOR_KEYWORDS = ["반도체", "메모리", "HBM", "DRAM", "낸드", "파운드리", "AI 반도체"]
+    _U = json.load(_fp)
+SECTOR_TICKERS = {s["ticker"] for s in _U["stocks"]}
+# 산업별 키워드. 예전엔 반도체 전용 목록이 여기 박혀 있었다 — 유니버스가 5개 산업으로
+# 넓어졌으므로 키워드도 함께 넓힌다(안 그러면 전력·금융 리포트가 영원히 섹터 미연관이 된다).
+_KW = _U.get("_research_keywords", {})
+SECTOR_KEYWORD_MAP = {k: v for k, v in _KW.items() if not k.startswith("_")}
+SECTOR_KEYWORDS = [w for ws in SECTOR_KEYWORD_MAP.values() for w in ws]
 
 CATEGORIES = [
     ("company", "종목", "https://finance.naver.com/research/company_list.naver"),
@@ -127,9 +132,14 @@ def parse_list(category, label, html):
         if not title:
             continue
 
-        # 섹터 연관 판정: 추적 종목이거나 제목/종목에 반도체 키워드
+        # 섹터 연관 판정: 추적 종목이거나 제목/종목에 산업 키워드.
+        # 어느 산업에 걸렸는지도 남긴다 — 대시보드가 산업별로 묶을 수 있어야 한다.
         text_blob = f"{stock} {title}"
-        sector = (ticker in SECTOR_TICKERS) or any(k in text_blob for k in SECTOR_KEYWORDS)
+        hit = [
+            ind for ind, ws in SECTOR_KEYWORD_MAP.items()
+            if any(w in text_blob for w in ws)
+        ]
+        sector = (ticker in SECTOR_TICKERS) or bool(hit)
 
         out.append({
             "category": category,         # company | industry | market
@@ -143,6 +153,7 @@ def parse_list(category, label, html):
             "url": read_url,
             "pdf": pdf,
             "sector": sector,
+            "industries": hit,       # 키워드로 걸린 산업들(없으면 [])
             "summary": "",
             "target": "",
             "opinion": "",

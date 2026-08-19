@@ -149,6 +149,17 @@ C = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(C)
 C._get_json = fake_get_json
 C.SLEEP = 0
+
+# 픽스처는 발행본 히스토리에서 복원한다 — 그 시점 유니버스에 있던 종목만 들어 있다.
+# 유니버스를 넓히면(2026-08-19: 5 → 10종목) 새 종목은 과거 발행본에 없으므로,
+# 이 테스트는 '픽스처가 실제로 가진 종목'으로만 사이클을 돌린다.
+# 이 테스트가 검증하는 건 유니버스 크기가 아니라 사이클 역학(장중 가드·날짜 정렬)이다.
+_universe_size = len(C.SECTOR)
+C.SECTOR = [t for t in C.SECTOR if t[0] in set(STK)]
+if len(C.SECTOR) < 2:
+    print(f"✗ 픽스처와 겹치는 종목 {len(C.SECTOR)}개 — 리플레이 불가")
+    sys.exit(1)
+print(f"· 픽스처 보유 {len(C.SECTOR)}종목으로 리플레이 (현재 유니버스 {_universe_size}종목)")
 # 시계열 원장(docs/series/)에는 절대 쓰지 않는다. 리플레이는 창을 인위적으로 흔들어
 # 돌리므로(장중·피드지연 시나리오) 그 산출물이 누적 원장에 섞이면 테스트가 증거를
 # 오염시킨다. upsert 로직 자체는 guard.test.py 가 임시 디렉터리에서 못박는다.
