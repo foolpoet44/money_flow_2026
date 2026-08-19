@@ -4,7 +4,7 @@ window.EDGE = {
   "quarantined_records": 31,
   "quarantine_through": "2026-08-07",
   "settled": 6,
-  "pending": 15,
+  "pending": 12,
   "cohort_note": "2026-08-07 이전 원장은 장중 오염·정렬 어긋남으로 격리됨(legacy). 아래 수치는 정렬 검증분만.",
   "horizons": {
     "1": {
