@@ -37,3 +37,4 @@
 {"as_of":"2026-08-14","logged_at":"2026-08-14T11:48:36.885Z","date_aligned":true,"signals":[{"scope":"삼성전자","tier":"alert","z":1.79,"conf":1,"dir":1},{"scope":"삼성전기","tier":"alert","z":1.65,"conf":1,"dir":-1}]}
 {"as_of":"2026-08-18","logged_at":"2026-08-18T11:29:32.322Z","date_aligned":true,"signals":[{"scope":"삼성전기","tier":"critical","z":2.27,"conf":2,"dir":-1}]}
 {"as_of":"2026-08-19","logged_at":"2026-08-19T11:29:49.010Z","universe_version":"2026-08-19","universe_size":10,"date_aligned":true,"signals":[{"scope":"SK하이닉스","ticker":"000660","tier":"alert","z":1.26,"conf":2,"dir":-1}]}
+{"as_of":"2026-08-20","logged_at":"2026-08-20T11:31:30.821Z","universe_version":"2026-08-19","universe_size":10,"date_aligned":true,"signals":[{"scope":"삼성전자","ticker":"005930","tier":"alert","z":1.42,"conf":2,"dir":1},{"scope":"LS ELECTRIC","ticker":"010120","tier":"alert","z":1.41,"conf":2,"dir":-1}]}
